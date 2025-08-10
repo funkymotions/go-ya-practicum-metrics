@@ -43,7 +43,7 @@ func TestNewAgent(t *testing.T) {
 }
 
 func Test_agent_sendMetrics(t *testing.T) {
-	var isServerWasCalled bool = false
+	var isServerWasCalled = false
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		isServerWasCalled = true
