@@ -32,11 +32,6 @@ func (h *metricHandler) HandleMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	metricType, metricName, metricValue := parts[1], parts[2], parts[3]
-	// if metricName == "" {
-	// 	w.WriteHeader(http.StatusNotFound)
-	// 	log.Printf("Metric name is empty in path: %s\n", path)
-	// 	return
-	// }
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("Invalid method %s for path: %s\n", r.Method, path)
