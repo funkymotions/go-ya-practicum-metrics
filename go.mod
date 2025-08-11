@@ -3,6 +3,7 @@ module github.com/funkymotions/go-ya-practicum-metrics
 go 1.23.4
 
 require (
+	github.com/go-chi/chi v1.5.5
 	github.com/magiconair/properties v1.8.10
 	github.com/stretchr/testify v1.10.0
 )

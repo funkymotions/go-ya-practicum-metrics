@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/repository"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
+	"github.com/go-chi/chi"
 )
 
 type Server struct {
@@ -20,7 +20,7 @@ func (s *Server) Run() error {
 }
 
 func NewServer() *Server {
-	var apiPrefix = "/update/"
+	var apiPrefix = "/update"
 	// repositories
 	metricRepo := repository.NewMetricRepository()
 
@@ -30,21 +30,15 @@ func NewServer() *Server {
 	// handlers
 	metricHandler := handler.NewMetricHandler(metricService)
 
-	// middleware
-	contentTypeMiddleware := middleware.NewContentTypeMiddleware()
-
-	// HTTP server setup
-	mux := http.NewServeMux()
-	mux.Handle(
-		apiPrefix,
-		contentTypeMiddleware.CheckContentType(
-			http.HandlerFunc(metricHandler.HandleMetric),
-		),
-	)
+	// routing
+	r := chi.NewRouter()
+	r.Get("/", http.HandlerFunc(metricHandler.GetAllMetrics))
+	r.Get("/value/{type}/{name}", http.HandlerFunc(metricHandler.GetMetric))
+	r.Post(apiPrefix+"/{type}/{name}/{value}", http.HandlerFunc(metricHandler.SetMetric))
 
 	server := &http.Server{
 		Addr:    ":8080",
-		Handler: mux,
+		Handler: r,
 	}
 
 	return &Server{

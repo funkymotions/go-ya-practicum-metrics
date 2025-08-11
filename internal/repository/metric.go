@@ -48,3 +48,13 @@ func (r *metricRepository) SetCounter(name string, delta int64) {
 		r.memStorage[key] = m
 	}
 }
+
+func (r *metricRepository) GetMetric(name string, metricType string) (*models.Metrics, bool) {
+	key := metricType + ":" + name
+	m, exists := r.memStorage[key]
+	return &m, exists
+}
+
+func (r *metricRepository) GetAllMetrics() map[string]models.Metrics {
+	return r.memStorage
+}
