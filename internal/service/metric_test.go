@@ -160,7 +160,7 @@ func Test_metricService_SetGauge(t *testing.T) {
 }
 
 func Test_metricService_GetAllMetricsForHTML(t *testing.T) {
-	var val float64 = 10.5
+	var val = 10.5
 	var delta int64 = 20
 	type fields struct {
 		repo metricRepoInterface

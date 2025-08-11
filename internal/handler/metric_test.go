@@ -263,7 +263,7 @@ func Test_metricHandler_GetAllMetrics(t *testing.T) {
 }
 
 func Test_metricHandler_GetMetric(t *testing.T) {
-	var metricCounterValue float64 = 1.1
+	var metricCounterValue = 1.1
 	type fields struct {
 		service metricService
 	}
