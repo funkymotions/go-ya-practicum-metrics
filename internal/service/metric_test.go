@@ -176,7 +176,7 @@ func Test_metricService_GetAllMetricsForHTML(t *testing.T) {
 			fields: fields{
 				repo: &metricRepoStub{},
 			},
-			want: "20\n10.500\n",
+			want: "20\n10.5\n",
 			repoReturnVal: map[string]models.Metrics{
 				"metric1": {
 					ID:    "metric1",

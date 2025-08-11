@@ -294,7 +294,7 @@ func Test_metricHandler_GetMetric(t *testing.T) {
 			},
 			expected: expected{
 				statusCode: http.StatusOK,
-				body:       []byte("1.100"),
+				body:       []byte("1.1"),
 				serviceMetricReturnValue: &models.Metrics{
 					ID:    "test_metric",
 					Value: &metricCounterValue,
