@@ -1,6 +1,9 @@
 package models
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 const (
 	Counter = "counter"
@@ -25,7 +28,8 @@ func (m *Metrics) String() string {
 		return fmt.Sprintf("%d", *m.Delta)
 	}
 	if m.MType == Gauge {
-		return fmt.Sprintf("%.3f", *m.Value)
+		str := strconv.FormatFloat(*m.Value, 'f', -1, 64)
+		return str
 	}
 	return ""
 }
