@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 )
 
 const (
@@ -19,7 +21,6 @@ const (
 )
 
 type agent struct {
-	URL             string
 	config          *Config
 	gaugeEndpoint   string
 	counterEndpoint string
@@ -30,7 +31,7 @@ type agent struct {
 
 type Config struct {
 	Client         *http.Client
-	URL            string
+	Endpoint       *env.Endpoint
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 }
@@ -38,14 +39,17 @@ type Config struct {
 func NewAgent(cfg *Config) *agent {
 	return &agent{
 		config:          cfg,
-		gaugeEndpoint:   cfg.URL + "/" + gauge,
-		counterEndpoint: cfg.URL + "/" + counter,
+		gaugeEndpoint:   "http://" + cfg.Endpoint.String() + "/" + gauge,
+		counterEndpoint: "http://" + cfg.Endpoint.String() + "/" + counter,
 		gaugeMetrics:    make(map[string]interface{}),
 		counterMetrics:  make(map[string]interface{}),
 	}
 }
 
 func (m *agent) Launch() {
+	log.Printf("Starting agent with endpoint: %s\n", m.config.Endpoint.String())
+	log.Printf("Report Interval: %s\n", m.config.ReportInterval.String())
+	log.Printf("Poll Interval: %s\n", m.config.PollInterval.String())
 	stop := make(chan struct{})
 	go m.collectMetrics(stop)
 	go m.sendMetrics(stop)
@@ -61,7 +65,7 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			log.Printf("Sending metrics to %s\n", m.config.URL)
+			log.Printf("Sending metrics to %s\n", m.config.Endpoint.String())
 			m.mu.Lock()
 			for name, value := range m.gaugeMetrics {
 				gaugeURL := m.prepareURL(name, value, gauge)

@@ -8,13 +8,14 @@ import (
 )
 
 func main() {
+	parseFlags()
 	agent := agent.NewAgent(&agent.Config{
+		Endpoint: endpoint,
 		Client: &http.Client{
 			Timeout: 2 * time.Second,
 		},
-		URL:            "http://localhost:8080/update",
-		PollInterval:   2 * time.Second,
-		ReportInterval: 10 * time.Second,
+		PollInterval:   time.Duration(pollInterval) * time.Second,
+		ReportInterval: time.Duration(reportInterval) * time.Second,
 	})
 
 	agent.Launch()

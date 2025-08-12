@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/repository"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
@@ -19,7 +20,7 @@ func (s *Server) Run() error {
 	return s.server.ListenAndServe()
 }
 
-func NewServer() *Server {
+func NewServer(e *env.Endpoint) *Server {
 	var apiPrefix = "/update"
 	// repositories
 	metricRepo := repository.NewMetricRepository()
@@ -37,7 +38,7 @@ func NewServer() *Server {
 	r.Post(apiPrefix+"/{type}/{name}/{value}", http.HandlerFunc(metricHandler.SetMetric))
 
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    e.String(),
 		Handler: r,
 	}
 

@@ -7,7 +7,8 @@ import (
 )
 
 func main() {
-	err := server.NewServer().Run()
+	parseFlags()
+	err := server.NewServer(endpoint).Run()
 	if err != nil {
 		log.Printf("Server launch error: %v\n", err)
 		panic(err)

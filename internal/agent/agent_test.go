@@ -3,15 +3,19 @@ package agent
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewAgent(t *testing.T) {
+	env := &env.Endpoint{Hostname: "localhost", Port: 8080}
 	type args struct {
 		cfg *Config
 	}
@@ -23,12 +27,16 @@ func TestNewAgent(t *testing.T) {
 		{
 			name: "should return new agent",
 			args: args{
-				cfg: &Config{},
+				cfg: &Config{
+					Endpoint: env,
+				},
 			},
 			want: &agent{
-				config:          &Config{},
-				gaugeEndpoint:   "/gauge",
-				counterEndpoint: "/counter",
+				config: &Config{
+					Endpoint: env,
+				},
+				gaugeEndpoint:   "http://" + env.String() + "/gauge",
+				counterEndpoint: "http://" + env.String() + "/counter",
 				gaugeMetrics:    make(map[string]interface{}),
 				counterMetrics:  make(map[string]interface{}),
 			},
@@ -48,10 +56,12 @@ func Test_agent_sendMetrics(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		isServerWasCalled = true
 	}))
-	defer ts.Close()
 
+	parsedTestServerURL, _ := url.Parse(ts.URL)
+	hostname := parsedTestServerURL.Hostname()
+	port, _ := strconv.ParseUint(parsedTestServerURL.Port(), 10, 32)
+	defer ts.Close()
 	type fields struct {
-		URL             string
 		config          *Config
 		gaugeEndpoint   string
 		counterEndpoint string
@@ -76,6 +86,8 @@ func Test_agent_sendMetrics(t *testing.T) {
 				counterEndpoint: ts.URL + "/update",
 				config: &Config{
 					Client:         &http.Client{},
+					Endpoint:       &env.Endpoint{Hostname: hostname, Port: uint(port)},
+					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 100 * time.Millisecond,
 				},
 			},
@@ -90,7 +102,6 @@ func Test_agent_sendMetrics(t *testing.T) {
 		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			m := &agent{
-				URL:             ts.URL,
 				config:          tt.fields.config,
 				gaugeEndpoint:   tt.fields.gaugeEndpoint,
 				counterEndpoint: tt.fields.counterEndpoint,
@@ -106,7 +117,6 @@ func Test_agent_sendMetrics(t *testing.T) {
 
 func Test_agent_prepareURL(t *testing.T) {
 	type fields struct {
-		URL             string
 		config          *Config
 		gaugeEndpoint   string
 		counterEndpoint string
@@ -153,7 +163,6 @@ func Test_agent_prepareURL(t *testing.T) {
 		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			m := &agent{
-				URL:             tt.fields.URL,
 				config:          tt.fields.config,
 				gaugeEndpoint:   tt.fields.gaugeEndpoint,
 				counterEndpoint: tt.fields.counterEndpoint,
@@ -186,10 +195,10 @@ func Test_agent_collectMetrics(t *testing.T) {
 		{
 			name: "should collect metrics",
 			fields: fields{
-				URL:            "http://localhost:8080",
 				gaugeMetrics:   make(map[string]interface{}),
 				counterMetrics: make(map[string]interface{}),
 				config: &Config{
+					Endpoint:       &env.Endpoint{Hostname: "localhost", Port: 8080},
 					Client:         &http.Client{},
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 100 * time.Second,
@@ -203,7 +212,6 @@ func Test_agent_collectMetrics(t *testing.T) {
 		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			m := &agent{
-				URL:             tt.fields.URL,
 				config:          tt.fields.config,
 				gaugeEndpoint:   tt.fields.gaugeEndpoint,
 				counterEndpoint: tt.fields.counterEndpoint,
