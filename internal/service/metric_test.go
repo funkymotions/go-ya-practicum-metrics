@@ -2,6 +2,7 @@ package service
 
 import (
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -47,6 +48,7 @@ func TestNewMetricService(t *testing.T) {
 				repo: &metricRepoStub{},
 			},
 			want: &metricService{
+				re:   regexp.MustCompile(`^\w+$`),
 				repo: &metricRepoStub{},
 			},
 		},
@@ -60,6 +62,7 @@ func TestNewMetricService(t *testing.T) {
 }
 
 func Test_metricService_SetCounter(t *testing.T) {
+	re := regexp.MustCompile(`^\w+$`)
 	type fields struct {
 		repo metricRepoInterface
 	}
@@ -101,6 +104,7 @@ func Test_metricService_SetCounter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &metricService{
 				repo: tt.fields.repo,
+				re:   re,
 			}
 			s.repo.(*metricRepoStub).On("SetCounter", tt.args.name, int64(1)).Return(nil)
 			err := s.SetCounter(tt.args.name, tt.args.rawValue)
@@ -110,6 +114,7 @@ func Test_metricService_SetCounter(t *testing.T) {
 }
 
 func Test_metricService_SetGauge(t *testing.T) {
+	re := regexp.MustCompile(`^\w+$`)
 	type fields struct {
 		repo metricRepoInterface
 	}
@@ -150,6 +155,7 @@ func Test_metricService_SetGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &metricService{
 				repo: tt.fields.repo,
+				re:   re,
 			}
 
 			s.repo.(*metricRepoStub).On("SetGauge", tt.args.name, float64(1.1)).Return(nil)

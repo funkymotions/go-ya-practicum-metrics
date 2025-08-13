@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/server"
 )
@@ -11,6 +12,6 @@ func main() {
 	err := server.NewServer(endpoint).Run()
 	if err != nil {
 		log.Printf("Server launch error: %v\n", err)
-		panic(err)
+		os.Exit(1)
 	}
 }

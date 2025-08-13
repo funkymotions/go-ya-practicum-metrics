@@ -5,14 +5,13 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 )
 
 const (
@@ -21,33 +20,34 @@ const (
 )
 
 type agent struct {
-	config          *Config
-	gaugeEndpoint   string
-	counterEndpoint string
-	gaugeMetrics    map[string]interface{}
-	counterMetrics  map[string]interface{}
-	mu              sync.Mutex
+	config         *Config
+	gaugeMetrics   map[string]interface{}
+	counterMetrics map[string]interface{}
+	mu             sync.Mutex
 }
 
 type Config struct {
 	Client         *http.Client
-	Endpoint       *env.Endpoint
 	PollInterval   time.Duration
 	ReportInterval time.Duration
+	GaugeURL       url.URL
+	CounterURL     url.URL
 }
 
 func NewAgent(cfg *Config) *agent {
 	return &agent{
-		config:          cfg,
-		gaugeEndpoint:   "http://" + cfg.Endpoint.String() + "/" + gauge,
-		counterEndpoint: "http://" + cfg.Endpoint.String() + "/" + counter,
-		gaugeMetrics:    make(map[string]interface{}),
-		counterMetrics:  make(map[string]interface{}),
+		config:         cfg,
+		gaugeMetrics:   make(map[string]interface{}),
+		counterMetrics: make(map[string]interface{}),
 	}
 }
 
 func (m *agent) Launch() {
-	log.Printf("Starting agent with endpoint: %s\n", m.config.Endpoint.String())
+	log.Printf(
+		"Starting agent with endpoints: %s\n%s\n",
+		m.config.GaugeURL.String(),
+		m.config.CounterURL.String(),
+	)
 	log.Printf("Report Interval: %s\n", m.config.ReportInterval.String())
 	log.Printf("Poll Interval: %s\n", m.config.PollInterval.String())
 	stop := make(chan struct{})
@@ -65,11 +65,15 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			log.Printf("Sending metrics to %s\n", m.config.Endpoint.String())
+			log.Printf("Sending metrics...\n")
 			m.mu.Lock()
 			for name, value := range m.gaugeMetrics {
 				gaugeURL := m.prepareURL(name, value, gauge)
-				resp, err := m.config.Client.Post(gaugeURL, "text/plain", strings.NewReader(fmt.Sprintf("%v", value)))
+				resp, err := m.config.Client.Post(
+					gaugeURL,
+					"text/plain",
+					strings.NewReader(fmt.Sprintf("%v", value)),
+				)
 				if err != nil {
 					log.Printf("Error sending gauge metric %s: %v\n", name, err)
 					continue
@@ -79,7 +83,11 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 
 			for name, value := range m.counterMetrics {
 				counterURL := m.prepareURL(name, value, counter)
-				resp, err := m.config.Client.Post(counterURL, "text/plain", strings.NewReader(fmt.Sprintf("%v", value)))
+				resp, err := m.config.Client.Post(
+					counterURL,
+					"text/plain",
+					strings.NewReader(fmt.Sprintf("%v", value)),
+				)
 				if err != nil {
 					log.Printf("Error sending counter metric %s: %v\n", name, err)
 					continue
@@ -94,10 +102,11 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 }
 
 func (m *agent) prepareURL(name string, value interface{}, metricType string) string {
+	val := fmt.Sprintf("%v", value)
 	if metricType == gauge {
-		return fmt.Sprintf("%s/%s/%v", m.gaugeEndpoint, name, value)
+		return m.config.GaugeURL.JoinPath(name, val).String()
 	}
-	return fmt.Sprintf("%s/%s/%v", m.counterEndpoint, name, value)
+	return m.config.CounterURL.JoinPath(name, val).String()
 }
 
 func (m *agent) collectMetrics(stop chan struct{}) {

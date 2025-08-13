@@ -17,16 +17,18 @@ type metricRepoInterface interface {
 
 type metricService struct {
 	repo metricRepoInterface
+	re   *regexp.Regexp
 }
 
 func NewMetricService(repo metricRepoInterface) *metricService {
 	return &metricService{
 		repo: repo,
+		re:   regexp.MustCompile(`^\w+$`),
 	}
 }
 
 func (s *metricService) SetCounter(name string, rawValue string) error {
-	if !isMetricNameAlphanumeric(name) {
+	if !isMetricNameAlphanumeric(name, s.re) {
 		return fmt.Errorf("invalid metric name: %s", name)
 	}
 	value, err := strconv.ParseInt(rawValue, 10, 64)
@@ -38,7 +40,7 @@ func (s *metricService) SetCounter(name string, rawValue string) error {
 }
 
 func (s *metricService) SetGauge(name string, rawValue string) error {
-	if !isMetricNameAlphanumeric(name) {
+	if !isMetricNameAlphanumeric(name, s.re) {
 		return fmt.Errorf("invalid metric name: %s", name)
 	}
 	value, err := strconv.ParseFloat(rawValue, 64)
@@ -50,7 +52,7 @@ func (s *metricService) SetGauge(name string, rawValue string) error {
 }
 
 func (s *metricService) GetMetric(name string, metricType string) (*models.Metrics, bool) {
-	if !isMetricNameAlphanumeric(name) {
+	if !isMetricNameAlphanumeric(name, s.re) {
 		return nil, false
 	}
 	return s.repo.GetMetric(name, metricType)
@@ -65,7 +67,6 @@ func (s *metricService) GetAllMetricsForHTML() string {
 	return result
 }
 
-func isMetricNameAlphanumeric(input string) bool {
-	re := regexp.MustCompile(`^\w+$`)
-	return re.MatchString(input)
+func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {
+	return r.MatchString(input)
 }
