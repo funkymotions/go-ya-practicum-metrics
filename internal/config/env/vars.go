@@ -15,7 +15,7 @@ type Variables struct {
 
 func ParseOptions() *Variables {
 	var envVars Variables
-	var endpointFlag *Endpoint = &Endpoint{Hostname: "localhost", Port: 8080}
+	var endpointFlag = &Endpoint{Hostname: "localhost", Port: 8080}
 	var reportInterval = new(uint)
 	var pollInterval = new(uint)
 	if err := env.Parse(&envVars); err != nil {
