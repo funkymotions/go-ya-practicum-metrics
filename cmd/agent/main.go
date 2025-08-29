@@ -6,26 +6,27 @@ import (
 	"time"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/agent"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 )
 
 func main() {
-	parseFlags()
+	options := env.ParseOptions()
 	agent := agent.NewAgent(&agent.Config{
 		GaugeURL: url.URL{
 			Scheme: "http",
-			Host:   endpoint.String(),
+			Host:   options.Endpoint,
 			Path:   "/update/gauge",
 		},
 		CounterURL: url.URL{
 			Scheme: "http",
-			Host:   endpoint.String(),
+			Host:   options.Endpoint,
 			Path:   "/update/counter",
 		},
 		Client: &http.Client{
 			Timeout: 2 * time.Second,
 		},
-		PollInterval:   time.Duration(pollInterval) * time.Second,
-		ReportInterval: time.Duration(reportInterval) * time.Second,
+		PollInterval:   time.Duration(options.PollInterval) * time.Second,
+		ReportInterval: time.Duration(options.ReportInterval) * time.Second,
 	})
 	agent.Launch()
 }

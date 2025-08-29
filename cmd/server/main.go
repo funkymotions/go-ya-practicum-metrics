@@ -4,12 +4,13 @@ import (
 	"log"
 	"os"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/server"
 )
 
 func main() {
-	parseFlags()
-	err := server.NewServer(endpoint).Run()
+	options := env.ParseOptions()
+	err := server.NewServer(options).Run()
 	if err != nil {
 		log.Printf("Server launch error: %v\n", err)
 		os.Exit(1)
