@@ -1,5 +1,10 @@
 package models
 
+import (
+	"fmt"
+	"strconv"
+)
+
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
@@ -16,4 +21,15 @@ type Metrics struct {
 	Delta *int64   `json:"delta,omitempty"`
 	Value *float64 `json:"value,omitempty"`
 	Hash  string   `json:"hash,omitempty"`
+}
+
+func (m *Metrics) String() string {
+	if m.MType == Counter {
+		return fmt.Sprintf("%d", *m.Delta)
+	}
+	if m.MType == Gauge {
+		str := strconv.FormatFloat(*m.Value, 'f', -1, 64)
+		return str
+	}
+	return ""
 }
