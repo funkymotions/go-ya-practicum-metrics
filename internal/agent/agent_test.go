@@ -14,15 +14,15 @@ import (
 )
 
 func TestNewAgent(t *testing.T) {
-	env := &env.Endpoint{Hostname: "localhost", Port: 8080}
+	env := &env.Variables{Endpoint: "localhost:8080"}
 	gaugeURL := url.URL{
 		Scheme: "http",
-		Host:   env.String(),
+		Host:   env.Endpoint,
 		Path:   "/gauge",
 	}
 	counterURL := url.URL{
 		Scheme: "http",
-		Host:   env.String(),
+		Host:   env.Endpoint,
 		Path:   "/counter",
 	}
 	type args struct {
