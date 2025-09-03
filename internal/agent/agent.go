@@ -99,11 +99,14 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 			for name, metric := range m.metrics {
 				b := prepareMetricBytes(&metric)
 				m.config.Logger.Info("Sending metric", zap.String("name", name), zap.ByteString("body", b))
-				resp, err := m.config.Client.Post(
-					url,
-					contentType,
-					bytes.NewBuffer(b),
-				)
+				r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(b))
+				if err != nil {
+					m.config.Logger.Error("Error creating request", zap.String("name", name), zap.Error(err))
+					continue
+				}
+				r.Header.Set("Content-Type", contentType)
+				r.Header.Set("Accept-Encoding", "gzip")
+				resp, err := m.config.Client.Do(r)
 				if err != nil {
 					m.config.Logger.Error("Error sending metric", zap.String("name", name), zap.Error(err))
 					continue

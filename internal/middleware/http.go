@@ -9,24 +9,16 @@ import (
 
 type customResponseWriter struct {
 	http.ResponseWriter
-	StatusCode    uint
-	Size          int
-	isHeadersSent bool
+	StatusCode uint
+	Size       int
 }
 
 func (w *customResponseWriter) WriteHeader(statusCode int) {
-	if w.isHeadersSent {
-		return
-	}
 	w.StatusCode = uint(statusCode)
 	w.ResponseWriter.WriteHeader(statusCode)
-	w.isHeadersSent = true
 }
 
 func (w *customResponseWriter) Write(b []byte) (int, error) {
-	if !w.isHeadersSent {
-		w.WriteHeader(http.StatusOK)
-	}
 	n, err := w.ResponseWriter.Write(b)
 	w.Size += n
 	return n, err

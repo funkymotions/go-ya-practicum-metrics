@@ -40,11 +40,17 @@ func NewServer(v *appenv.Variables) *Server {
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
-	r.Get("/", http.HandlerFunc(metricHandler.GetAllMetrics))
+	r.
+		With(middleware.CompressHandler).
+		Get("/", http.HandlerFunc(metricHandler.GetAllMetrics))
 	r.Get("/value/{type}/{name}", http.HandlerFunc(metricHandler.GetMetric))
 	r.Post(apiPrefix+"/{type}/{name}/{value}", http.HandlerFunc(metricHandler.SetMetric))
-	r.Post("/update/", http.HandlerFunc(metricHandler.SetMetricByJSON))
-	r.Post("/value/", http.HandlerFunc(metricHandler.GetMetricByJSON))
+	r.
+		With(middleware.CompressHandler).
+		Post("/update/", http.HandlerFunc(metricHandler.SetMetricByJSON))
+	r.
+		With(middleware.CompressHandler).
+		Post("/value/", http.HandlerFunc(metricHandler.GetMetricByJSON))
 	server := &http.Server{
 		Addr:    v.Endpoint,
 		Handler: r,

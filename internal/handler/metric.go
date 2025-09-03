@@ -76,7 +76,7 @@ func (h *metricHandler) GetAllMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (h *metricHandler) SetMetricByJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	contentType := w.Header().Get("Content-Type")
+	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -99,7 +99,7 @@ func (h *metricHandler) SetMetricByJSON(w http.ResponseWriter, r *http.Request) 
 
 func (h *metricHandler) GetMetricByJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	contentType := w.Header().Get("Content-Type")
+	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -118,5 +118,4 @@ func (h *metricHandler) GetMetricByJSON(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }
