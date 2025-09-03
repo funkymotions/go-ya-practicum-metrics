@@ -43,6 +43,8 @@ func NewServer(v *appenv.Variables) *Server {
 	r.Get("/", http.HandlerFunc(metricHandler.GetAllMetrics))
 	r.Get("/value/{type}/{name}", http.HandlerFunc(metricHandler.GetMetric))
 	r.Post(apiPrefix+"/{type}/{name}/{value}", http.HandlerFunc(metricHandler.SetMetric))
+	r.Post("/update/", http.HandlerFunc(metricHandler.SetMetricByJSON))
+	r.Post("/value/", http.HandlerFunc(metricHandler.GetMetricByJSON))
 	server := &http.Server{
 		Addr:    v.Endpoint,
 		Handler: r,

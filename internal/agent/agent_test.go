@@ -10,20 +10,27 @@ import (
 	"time"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
+	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
+
+func float64Ptr(i int) *float64 {
+	f := float64(i)
+	return &f
+}
+
+func int64Ptr(i int) *int64 {
+	i64 := int64(i)
+	return &i64
+}
 
 func TestNewAgent(t *testing.T) {
 	env := &env.Variables{Endpoint: "localhost:8080"}
-	gaugeURL := url.URL{
+	metricURL := url.URL{
 		Scheme: "http",
 		Host:   env.Endpoint,
-		Path:   "/gauge",
-	}
-	counterURL := url.URL{
-		Scheme: "http",
-		Host:   env.Endpoint,
-		Path:   "/counter",
+		Path:   "/metric",
 	}
 	type args struct {
 		cfg *Config
@@ -37,17 +44,14 @@ func TestNewAgent(t *testing.T) {
 			name: "should return new agent",
 			args: args{
 				cfg: &Config{
-					GaugeURL:   gaugeURL,
-					CounterURL: counterURL,
+					MetricURL: metricURL,
 				},
 			},
 			want: &agent{
 				config: &Config{
-					GaugeURL:   gaugeURL,
-					CounterURL: counterURL,
+					MetricURL: metricURL,
 				},
-				gaugeMetrics:   make(map[string]interface{}),
-				counterMetrics: make(map[string]interface{}),
+				metrics: make(map[string]models.Metrics),
 			},
 		},
 	}
@@ -69,9 +73,8 @@ func Test_agent_sendMetrics(t *testing.T) {
 	testServerURL, _ := url.Parse(ts.URL)
 	defer ts.Close()
 	type fields struct {
-		config         *Config
-		gaugeMetrics   map[string]interface{}
-		counterMetrics map[string]interface{}
+		config  *Config
+		metrics map[string]models.Metrics
 	}
 	type args struct {
 		stop chan struct{}
@@ -85,19 +88,25 @@ func Test_agent_sendMetrics(t *testing.T) {
 		{
 			name: "should send metrics to server",
 			fields: fields{
-				gaugeMetrics:   map[string]interface{}{"test_metric_name": 42},
-				counterMetrics: map[string]interface{}{"test_counter": 100},
-				config: &Config{
-					Client: &http.Client{},
-					GaugeURL: url.URL{
-						Scheme: "http",
-						Host:   testServerURL.Host,
-						Path:   "/update/gauge",
+				metrics: map[string]models.Metrics{
+					"test_metric_name": {
+						ID:    "test_metric_name",
+						MType: models.Gauge,
+						Value: float64Ptr(42),
 					},
-					CounterURL: url.URL{
+					"test_counter": {
+						ID:    "test_counter",
+						MType: models.Counter,
+						Delta: int64Ptr(100),
+					},
+				},
+				config: &Config{
+					Logger: zap.NewNop(),
+					Client: &http.Client{},
+					MetricURL: url.URL{
 						Scheme: "http",
 						Host:   testServerURL.Host,
-						Path:   "/update/counter",
+						Path:   "/update/metric",
 					},
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 100 * time.Millisecond,
@@ -114,9 +123,8 @@ func Test_agent_sendMetrics(t *testing.T) {
 		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			m := &agent{
-				config:         tt.fields.config,
-				gaugeMetrics:   tt.fields.gaugeMetrics,
-				counterMetrics: tt.fields.counterMetrics,
+				config:  tt.fields.config,
+				metrics: tt.fields.metrics,
 			}
 			go m.sendMetrics(tt.args.stop)
 			time.Sleep(150 * time.Millisecond)
@@ -125,90 +133,12 @@ func Test_agent_sendMetrics(t *testing.T) {
 	}
 }
 
-func Test_agent_prepareURL(t *testing.T) {
-	type fields struct {
-		config         *Config
-		gaugeMetrics   map[string]interface{}
-		counterMetrics map[string]interface{}
-	}
-	type args struct {
-		name       string
-		value      interface{}
-		metricType string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   string
-	}{
-		{
-			name: "should prepare gauge URL",
-			fields: fields{
-				config: &Config{
-					CounterURL: url.URL{
-						Scheme: "http",
-						Host:   "localhost:8080",
-						Path:   "/update/counter",
-					},
-					GaugeURL: url.URL{
-						Scheme: "http",
-						Host:   "localhost:8080",
-						Path:   "/update/gauge",
-					},
-				},
-			},
-			args: args{
-				name:       "test_metric_name",
-				value:      42,
-				metricType: gauge,
-			},
-			want: "http://localhost:8080/update/gauge/test_metric_name/42",
-		},
-		{
-			name: "should prepare counter URL",
-			fields: fields{
-				config: &Config{
-					CounterURL: url.URL{
-						Scheme: "http",
-						Host:   "localhost:8080",
-						Path:   "/update/counter",
-					},
-					GaugeURL: url.URL{
-						Scheme: "http",
-						Host:   "localhost:8080",
-						Path:   "/update/gauge",
-					},
-				},
-			},
-			args: args{
-				name:       "test_counter",
-				value:      100,
-				metricType: counter,
-			},
-			want: "http://localhost:8080/update/counter/test_counter/100",
-		},
-	}
-	for i := range tests {
-		tt := &tests[i]
-		t.Run(tt.name, func(t *testing.T) {
-			m := &agent{
-				config:         tt.fields.config,
-				gaugeMetrics:   tt.fields.gaugeMetrics,
-				counterMetrics: tt.fields.counterMetrics,
-			}
-			require.Equal(t, tt.want, m.prepareURL(tt.args.name, tt.args.value, tt.args.metricType))
-		})
-	}
-}
-
 func Test_agent_collectMetrics(t *testing.T) {
 	type fields struct {
-		URL            string
-		config         *Config
-		gaugeMetrics   map[string]interface{}
-		counterMetrics map[string]interface{}
-		mu             sync.Mutex
+		URL     string
+		config  *Config
+		metrics map[string]models.Metrics
+		mu      sync.Mutex
 	}
 	type args struct {
 		stop chan struct{}
@@ -221,9 +151,9 @@ func Test_agent_collectMetrics(t *testing.T) {
 		{
 			name: "should collect metrics",
 			fields: fields{
-				gaugeMetrics:   make(map[string]interface{}),
-				counterMetrics: make(map[string]interface{}),
+				metrics: make(map[string]models.Metrics),
 				config: &Config{
+					Logger:         zap.NewNop(),
 					Client:         &http.Client{},
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 100 * time.Second,
@@ -237,15 +167,13 @@ func Test_agent_collectMetrics(t *testing.T) {
 		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			m := &agent{
-				config:         tt.fields.config,
-				gaugeMetrics:   tt.fields.gaugeMetrics,
-				counterMetrics: tt.fields.counterMetrics,
-				mu:             sync.Mutex{},
+				config:  tt.fields.config,
+				metrics: tt.fields.metrics,
+				mu:      sync.Mutex{},
 			}
 			go m.collectMetrics(tt.args.stop)
 			time.Sleep(100 * time.Millisecond)
-			result := len(m.gaugeMetrics) + len(m.counterMetrics)
-
+			result := len(m.metrics)
 			require.NotEqual(t, result, 0, "Expected metrics to be collected")
 		})
 	}

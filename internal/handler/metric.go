@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -12,6 +13,8 @@ import (
 type metricService interface {
 	SetCounter(name string, value string) error
 	SetGauge(name string, value string) error
+	SetMetricByModel(m *models.Metrics) error
+	GetMetricByModel(m *models.Metrics) (*models.Metrics, error)
 	GetMetric(metricType, name string) (*models.Metrics, bool)
 	GetAllMetricsForHTML() string
 }
@@ -68,4 +71,52 @@ func (h *metricHandler) GetAllMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics := h.service.GetAllMetricsForHTML()
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(metrics))
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *metricHandler) SetMetricByJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var metric models.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := h.service.SetMetricByModel(&metric); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(metric); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *metricHandler) GetMetricByJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var metric models.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	m, err := h.service.GetMetricByModel(&metric)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(m); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

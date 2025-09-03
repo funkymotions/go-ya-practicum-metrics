@@ -16,6 +16,7 @@ func NewLogger(logLvl zap.AtomicLevel) (*zap.Logger, error) {
 		config := zap.NewProductionConfig()
 		config.Level = logLvl
 		logger, err = config.Build()
+		defer logger.Sync()
 	})
 	return logger, err
 }
