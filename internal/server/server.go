@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"time"
 
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
@@ -32,7 +33,7 @@ func NewServer(v *appenv.Variables) *Server {
 		log.Fatalf("failed to initialize logger: %v", err)
 	}
 	// repositories
-	metricRepo := repository.NewMetricRepository()
+	metricRepo := repository.NewMetricRepository(v.FileStoragePath, v.Restore, time.Second*time.Duration(v.StoreInterval))
 	// services
 	metricService := service.NewMetricService(metricRepo)
 	// handlers

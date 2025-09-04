@@ -17,7 +17,7 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to create logger")
 	}
-	options := env.ParseOptions()
+	options := env.ParseAgentOptions()
 	agent := agent.NewAgent(&agent.Config{
 		Logger: l,
 		MetricURL: url.URL{

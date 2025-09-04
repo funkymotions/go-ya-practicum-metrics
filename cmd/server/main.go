@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	options := env.ParseOptions()
+	options := env.ParseServerOptions()
 	err := server.NewServer(options).Run()
 	if err != nil {
 		log.Printf("Server launch error: %v\n", err)
