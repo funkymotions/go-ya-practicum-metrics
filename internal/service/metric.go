@@ -67,6 +67,38 @@ func (s *metricService) GetAllMetricsForHTML() string {
 	return result
 }
 
+func (s *metricService) SetMetricByModel(metric *models.Metrics) error {
+	if !isMetricNameAlphanumeric(metric.ID, s.re) {
+		return fmt.Errorf("invalid metric name: %s", metric.ID)
+	}
+	switch metric.MType {
+	case models.Gauge:
+		if metric.Value == nil {
+			return fmt.Errorf("invalid gauge metric: %s", metric.ID)
+		}
+		s.repo.SetGauge(metric.ID, *metric.Value)
+	case models.Counter:
+		if metric.Delta == nil {
+			return fmt.Errorf("invalid counter metric: %s", metric.ID)
+		}
+		s.repo.SetCounter(metric.ID, *metric.Delta)
+	default:
+		return fmt.Errorf("invalid metric type: %s", metric.MType)
+	}
+	return nil
+}
+
+func (s *metricService) GetMetricByModel(metric *models.Metrics) (*models.Metrics, error) {
+	if !isMetricNameAlphanumeric(metric.ID, s.re) {
+		return nil, fmt.Errorf("invalid metric name: %s", metric.ID)
+	}
+	m, found := s.repo.GetMetric(metric.ID, metric.MType)
+	if !found {
+		return nil, fmt.Errorf("metric not found: %s", metric.ID)
+	}
+	return m, nil
+}
+
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {
 	return r.MatchString(input)
 }
