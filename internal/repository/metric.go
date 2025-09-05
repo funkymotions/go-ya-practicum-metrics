@@ -15,14 +15,25 @@ type metricRepository struct {
 	mu            sync.RWMutex
 	writeInterval time.Duration
 	filePath      string
+	stopCh        chan struct{}
+	doneCh        chan struct{}
 }
 
-func NewMetricRepository(filePath string, isRestoreNeeded bool, writeInterval time.Duration) *metricRepository {
+func NewMetricRepository(
+	filePath string,
+	isRestoreNeeded bool,
+	writeInterval time.Duration,
+	stopCh chan struct{},
+	doneCh chan struct{},
+
+) *metricRepository {
 	r := &metricRepository{
 		memStorage:    make(map[string]models.Metrics),
 		mu:            sync.RWMutex{},
 		writeInterval: writeInterval,
 		filePath:      filePath,
+		stopCh:        stopCh,
+		doneCh:        doneCh,
 	}
 	if isRestoreNeeded {
 		r.readMetricsFromFile()
@@ -30,8 +41,15 @@ func NewMetricRepository(filePath string, isRestoreNeeded bool, writeInterval ti
 	if writeInterval > 0 && filePath != "" {
 		ticker := time.NewTicker(writeInterval)
 		go func() {
-			for range ticker.C {
-				r.writeMetricsToFile()
+			defer close(r.doneCh)
+			for {
+				select {
+				case <-ticker.C:
+					r.writeMetricsToFile()
+				case <-r.stopCh:
+					ticker.Stop()
+					return
+				}
 			}
 		}()
 	}

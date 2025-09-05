@@ -26,10 +26,11 @@ func int64Ptr(i int) *int64 {
 }
 
 func TestNewAgent(t *testing.T) {
-	env := &env.Variables{Endpoint: "localhost:8080"}
+	endpoint := "localhost:8080"
+	env := &env.Variables{Endpoint: &endpoint}
 	metricURL := url.URL{
 		Scheme: "http",
-		Host:   env.Endpoint,
+		Host:   *env.Endpoint,
 		Path:   "/metric",
 	}
 	type args struct {

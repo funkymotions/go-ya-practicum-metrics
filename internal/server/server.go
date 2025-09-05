@@ -16,13 +16,26 @@ import (
 )
 
 type Server struct {
-	server *http.Server
-	logger *zap.Logger
+	server            *http.Server
+	logger            *zap.Logger
+	stopCh            chan struct{}
+	doneCh            chan struct{}
+	shouldWaitForDone bool
 }
 
 func (s *Server) Run() error {
 	s.logger.Info("Starting server", zap.String("addr", s.server.Addr))
 	return s.server.ListenAndServe()
+}
+
+func (s *Server) Shutdown() {
+	s.logger.Warn("Shutting down server", zap.String("addr", s.server.Addr))
+	// notify all subscribed goroutines to exit
+	close(s.stopCh)
+	if s.shouldWaitForDone {
+		<-s.doneCh
+		s.logger.Info("All goroutines have exited")
+	}
 }
 
 func NewServer(v *appenv.Variables) *Server {
@@ -32,8 +45,17 @@ func NewServer(v *appenv.Variables) *Server {
 	if err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
 	}
+	// channels
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
 	// repositories
-	metricRepo := repository.NewMetricRepository(v.FileStoragePath, v.Restore, time.Second*time.Duration(v.StoreInterval))
+	metricRepo := repository.NewMetricRepository(
+		*v.FileStoragePath,
+		*v.Restore,
+		time.Second*time.Duration(*v.StoreInterval),
+		stopCh,
+		doneCh,
+	)
 	// services
 	metricService := service.NewMetricService(metricRepo)
 	// handlers
@@ -53,11 +75,14 @@ func NewServer(v *appenv.Variables) *Server {
 		With(middleware.CompressHandler).
 		Post("/value/", http.HandlerFunc(metricHandler.GetMetricByJSON))
 	server := &http.Server{
-		Addr:    v.Endpoint,
+		Addr:    *v.Endpoint,
 		Handler: r,
 	}
 	return &Server{
-		server: server,
-		logger: logger,
+		server:            server,
+		logger:            logger,
+		stopCh:            stopCh,
+		doneCh:            doneCh,
+		shouldWaitForDone: *v.StoreInterval != 0,
 	}
 }

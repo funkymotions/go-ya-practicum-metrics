@@ -8,12 +8,12 @@ import (
 )
 
 type Variables struct {
-	Endpoint        string `env:"ADDRESS"`
-	ReportInterval  uint   `env:"REPORT_INTERVAL"`
-	PollInterval    uint   `env:"POLL_INTERVAL"`
-	StoreInterval   uint   `env:"STORE_INTERVAL"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore         bool   `env:"RESTORE"`
+	Endpoint        *string `env:"ADDRESS"`
+	ReportInterval  *uint   `env:"REPORT_INTERVAL"`
+	PollInterval    *uint   `env:"POLL_INTERVAL"`
+	StoreInterval   *uint   `env:"STORE_INTERVAL"`
+	FileStoragePath *string `env:"FILE_STORAGE_PATH"`
+	Restore         *bool   `env:"RESTORE"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -29,23 +29,24 @@ func ParseAgentOptions() *Variables {
 	flag.UintVar(pollInterval, "p", 2, "set poll interval (seconds)")
 	flag.Parse()
 	return &Variables{
-		Endpoint: func() string {
-			if envVars.Endpoint != "" {
+		Endpoint: func() *string {
+			if envVars.Endpoint != nil {
 				return envVars.Endpoint
 			}
-			return endpointFlag.String()
+			res := endpointFlag.String()
+			return &res
 		}(),
-		ReportInterval: func() uint {
-			if envVars.ReportInterval != 0 {
+		ReportInterval: func() *uint {
+			if envVars.ReportInterval != nil {
 				return envVars.ReportInterval
 			}
-			return *reportInterval
+			return reportInterval
 		}(),
-		PollInterval: func() uint {
-			if envVars.PollInterval != 0 {
+		PollInterval: func() *uint {
+			if envVars.PollInterval != nil {
 				return envVars.PollInterval
 			}
-			return *pollInterval
+			return pollInterval
 		}(),
 	}
 }
@@ -60,34 +61,35 @@ func ParseServerOptions() *Variables {
 		log.Fatal(err)
 	}
 	flag.UintVar(storeInterval, "i", 300, "set store interval (seconds)")
-	flag.StringVar(fileStoragePath, "f", "./tmp/metrics-db.json", "set file storage path")
+	flag.StringVar(fileStoragePath, "f", "tmp/metrics-db.json", "set file storage path")
 	flag.BoolVar(restore, "r", false, "set restore")
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
 	flag.Parse()
 	return &Variables{
-		Endpoint: func() string {
-			if envVars.Endpoint != "" {
+		Endpoint: func() *string {
+			if envVars.Endpoint != nil {
 				return envVars.Endpoint
 			}
-			return endpointFlag.String()
+			res := endpointFlag.String()
+			return &res
 		}(),
-		StoreInterval: func() uint {
-			if envVars.StoreInterval != 0 {
+		StoreInterval: func() *uint {
+			if envVars.StoreInterval != nil {
 				return envVars.StoreInterval
 			}
-			return *storeInterval
+			return storeInterval
 		}(),
-		FileStoragePath: func() string {
-			if envVars.FileStoragePath != "" {
+		FileStoragePath: func() *string {
+			if envVars.FileStoragePath != nil {
 				return envVars.FileStoragePath
 			}
-			return *fileStoragePath
+			return fileStoragePath
 		}(),
-		Restore: func() bool {
-			if envVars.Restore {
+		Restore: func() *bool {
+			if envVars.Restore != nil {
 				return envVars.Restore
 			}
-			return *restore
+			return restore
 		}(),
 	}
 }

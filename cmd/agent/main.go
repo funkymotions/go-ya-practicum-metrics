@@ -22,14 +22,14 @@ func main() {
 		Logger: l,
 		MetricURL: url.URL{
 			Scheme: "http",
-			Host:   options.Endpoint,
+			Host:   *options.Endpoint,
 			Path:   "/update/",
 		},
 		Client: &http.Client{
 			Timeout: 200 * time.Millisecond,
 		},
-		PollInterval:   time.Duration(options.PollInterval) * time.Second,
-		ReportInterval: time.Duration(options.ReportInterval) * time.Second,
+		PollInterval:   time.Duration(*options.PollInterval) * time.Second,
+		ReportInterval: time.Duration(*options.ReportInterval) * time.Second,
 	})
 	agent.Launch()
 }

@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -17,37 +16,36 @@ import (
 	"go.uber.org/zap"
 )
 
+type getter func(runtime.MemStats) float64
+
 const contentType = "application/json"
 
-var names = []string{
-	"Alloc",
-	"BuckHashSys",
-	"Frees",
-	"GCCPUFraction",
-	"GCSys",
-	"HeapAlloc",
-	"HeapIdle",
-	"HeapInuse",
-	"HeapObjects",
-	"HeapReleased",
-	"HeapSys",
-	"LastGC",
-	"Lookups",
-	"MCacheInuse",
-	"MCacheSys",
-	"MSpanInuse",
-	"MSpanSys",
-	"Mallocs",
-	"NextGC",
-	"NumForcedGC",
-	"NumGC",
-	"OtherSys",
-	"PauseTotalNs",
-	"StackInuse",
-	"StackSys",
-	"Sys",
-	"TotalAlloc",
-	"NumGC",
+var getters = map[string]getter{
+	"Alloc":         func(stats runtime.MemStats) float64 { return float64(stats.Alloc) },
+	"BuckHashSys":   func(stats runtime.MemStats) float64 { return float64(stats.BuckHashSys) },
+	"Frees":         func(stats runtime.MemStats) float64 { return float64(stats.Frees) },
+	"GCCPUFraction": func(stats runtime.MemStats) float64 { return float64(stats.GCCPUFraction) },
+	"GCSys":         func(stats runtime.MemStats) float64 { return float64(stats.GCSys) },
+	"HeapAlloc":     func(stats runtime.MemStats) float64 { return float64(stats.HeapAlloc) },
+	"HeapIdle":      func(stats runtime.MemStats) float64 { return float64(stats.HeapIdle) },
+	"HeapInuse":     func(stats runtime.MemStats) float64 { return float64(stats.HeapInuse) },
+	"HeapObjects":   func(stats runtime.MemStats) float64 { return float64(stats.HeapObjects) },
+	"HeapReleased":  func(stats runtime.MemStats) float64 { return float64(stats.HeapReleased) },
+	"HeapSys":       func(stats runtime.MemStats) float64 { return float64(stats.HeapSys) },
+	"LastGC":        func(stats runtime.MemStats) float64 { return float64(stats.LastGC) },
+	"Lookups":       func(stats runtime.MemStats) float64 { return float64(stats.Lookups) },
+	"MCacheInuse":   func(stats runtime.MemStats) float64 { return float64(stats.MCacheInuse) },
+	"MCacheSys":     func(stats runtime.MemStats) float64 { return float64(stats.MCacheSys) },
+	"Mallocs":       func(stats runtime.MemStats) float64 { return float64(stats.Mallocs) },
+	"NextGC":        func(stats runtime.MemStats) float64 { return float64(stats.NextGC) },
+	"NumForcedGC":   func(stats runtime.MemStats) float64 { return float64(stats.NumForcedGC) },
+	"OtherSys":      func(stats runtime.MemStats) float64 { return float64(stats.OtherSys) },
+	"PauseTotalNs":  func(stats runtime.MemStats) float64 { return float64(stats.PauseTotalNs) },
+	"StackInuse":    func(stats runtime.MemStats) float64 { return float64(stats.StackInuse) },
+	"StackSys":      func(stats runtime.MemStats) float64 { return float64(stats.StackSys) },
+	"Sys":           func(stats runtime.MemStats) float64 { return float64(stats.Sys) },
+	"TotalAlloc":    func(stats runtime.MemStats) float64 { return float64(stats.TotalAlloc) },
+	"NumGC":         func(stats runtime.MemStats) float64 { return float64(stats.NumGC) },
 }
 
 type agent struct {
@@ -130,9 +128,8 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 			var memStats runtime.MemStats
 			runtime.ReadMemStats(&memStats)
 			m.mu.Lock()
-			for _, name := range names {
-				// using reflection to gather memStats metrics
-				m.metrics[name] = getGaugeMetric(memStats, name)
+			for key, getter := range getters {
+				m.metrics[key] = getGaugeMetricModel(key, memStats, getter)
 			}
 			randVal := float64(rand.Intn(1000))
 			m.metrics["RandomValue"] = models.Metrics{
@@ -159,23 +156,12 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 	}
 }
 
-func getGaugeMetric(stats runtime.MemStats, name string) models.Metrics {
-	reflectValue := reflect.ValueOf(stats)
-	field := reflectValue.FieldByName(name)
-	fieldValue := field.Interface()
-	var floatVal float64
-	switch v := fieldValue.(type) {
-	case uint64:
-		floatVal = float64(v)
-	case uint32:
-		floatVal = float64(v)
-	case float64:
-		floatVal = v
-	}
+func getGaugeMetricModel(name string, stats runtime.MemStats, g getter) models.Metrics {
+	value := g(stats)
 	return models.Metrics{
 		ID:    name,
 		MType: models.Gauge,
-		Value: &floatVal,
+		Value: &value,
 	}
 }
 
