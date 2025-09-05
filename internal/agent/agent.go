@@ -41,6 +41,8 @@ var getters = map[string]getter{
 	"NumForcedGC":   func(stats runtime.MemStats) float64 { return float64(stats.NumForcedGC) },
 	"OtherSys":      func(stats runtime.MemStats) float64 { return float64(stats.OtherSys) },
 	"PauseTotalNs":  func(stats runtime.MemStats) float64 { return float64(stats.PauseTotalNs) },
+	"MSpanInuse":    func(stats runtime.MemStats) float64 { return float64(stats.MSpanInuse) },
+	"MSpanSys":      func(stats runtime.MemStats) float64 { return float64(stats.MSpanSys) },
 	"StackInuse":    func(stats runtime.MemStats) float64 { return float64(stats.StackInuse) },
 	"StackSys":      func(stats runtime.MemStats) float64 { return float64(stats.StackSys) },
 	"Sys":           func(stats runtime.MemStats) float64 { return float64(stats.Sys) },
