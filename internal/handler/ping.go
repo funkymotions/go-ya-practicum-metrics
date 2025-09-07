@@ -4,8 +4,8 @@ import (
 	"net/http"
 )
 
-func (m metricHandler) Ping(w http.ResponseWriter, r *http.Request) {
-	if err := m.service.Ping(); err != nil {
+func (h *metricHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	if err := h.service.Ping(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
