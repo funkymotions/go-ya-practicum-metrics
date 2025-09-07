@@ -5,7 +5,7 @@ type DBConfig struct {
 	DSN  string
 }
 
-func NewDbConfig(dsn string) *DBConfig {
+func NewDBConfig(dsn string) *DBConfig {
 	return &DBConfig{
 		// hardcoded for now, can be extended later
 		Type: "postgres",
