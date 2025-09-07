@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 )
 
@@ -17,12 +18,14 @@ type metricRepository struct {
 	filePath      string
 	stopCh        chan struct{}
 	doneCh        chan struct{}
+	db            *sql.SQLDriver
 }
 
 func NewMetricRepository(
 	filePath string,
 	isRestoreNeeded bool,
 	writeInterval time.Duration,
+	db *sql.SQLDriver,
 	stopCh chan struct{},
 	doneCh chan struct{},
 
@@ -32,6 +35,7 @@ func NewMetricRepository(
 		mu:            sync.RWMutex{},
 		writeInterval: writeInterval,
 		filePath:      filePath,
+		db:            db,
 		stopCh:        stopCh,
 		doneCh:        doneCh,
 	}
@@ -115,6 +119,13 @@ func (r *metricRepository) GetAllMetrics() map[string]models.Metrics {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.memStorage
+}
+
+// donno where to place this method for now
+// repo will be used to host db connection wrapper,
+// so in case of responsility separation it should be rignt place
+func (r *metricRepository) Ping() error {
+	return r.db.DB.Ping()
 }
 
 func (r *metricRepository) writeMetricsToFile() error {

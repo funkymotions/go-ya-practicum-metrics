@@ -33,6 +33,11 @@ func (m *metricRepoStub) GetAllMetrics() map[string]models.Metrics {
 	return args.Get(0).(map[string]models.Metrics)
 }
 
+func (m *metricRepoStub) Ping() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
 func TestNewMetricService(t *testing.T) {
 	type args struct {
 		repo metricRepoInterface

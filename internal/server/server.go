@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
+	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
@@ -39,7 +41,15 @@ func (s *Server) Shutdown() {
 }
 
 func NewServer(v *appenv.Variables) *Server {
-	var apiPrefix = "/update"
+	// db
+	if v.DatabaseDSN == nil {
+		log.Fatal("database dsn is not set")
+	}
+	dbConf := db.NewDbConfig(*v.DatabaseDSN)
+	d, err := sql.NewSQLDriver(dbConf)
+	if err != nil {
+		log.Fatalf("failed to connect to db: %v", err)
+	}
 	// logger
 	logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	if err != nil {
@@ -53,6 +63,7 @@ func NewServer(v *appenv.Variables) *Server {
 		*v.FileStoragePath,
 		*v.Restore,
 		time.Second*time.Duration(*v.StoreInterval),
+		d,
 		stopCh,
 		doneCh,
 	)
@@ -63,23 +74,14 @@ func NewServer(v *appenv.Variables) *Server {
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
-	r.
-		With(middleware.CompressHandler).
-		Get("/", http.HandlerFunc(metricHandler.GetAllMetrics))
-	r.Get("/value/{type}/{name}", http.HandlerFunc(metricHandler.GetMetric))
-	r.Post(apiPrefix+"/{type}/{name}/{value}", http.HandlerFunc(metricHandler.SetMetric))
-	r.
-		With(middleware.CompressHandler).
-		Post("/update/", http.HandlerFunc(metricHandler.SetMetricByJSON))
-	r.
-		With(middleware.CompressHandler).
-		Post("/value/", http.HandlerFunc(metricHandler.GetMetricByJSON))
-	server := &http.Server{
+	// register metrics entries
+	metricHandler.Register(r)
+	httpSrv := &http.Server{
 		Addr:    *v.Endpoint,
 		Handler: r,
 	}
 	return &Server{
-		server:            server,
+		server:            httpSrv,
 		logger:            logger,
 		stopCh:            stopCh,
 		doneCh:            doneCh,
