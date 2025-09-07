@@ -14,6 +14,7 @@ type Variables struct {
 	StoreInterval   *uint   `env:"STORE_INTERVAL"`
 	FileStoragePath *string `env:"FILE_STORAGE_PATH"`
 	Restore         *bool   `env:"RESTORE"`
+	DatabaseDSN     *string `env:"DATABASE_DSN"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -57,6 +58,7 @@ func ParseServerOptions() *Variables {
 	var storeInterval = new(uint)
 	var fileStoragePath = new(string)
 	var restore = new(bool)
+	var dsn = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -64,6 +66,7 @@ func ParseServerOptions() *Variables {
 	flag.StringVar(fileStoragePath, "f", "tmp/metrics-db.json", "set file storage path")
 	flag.BoolVar(restore, "r", false, "set restore")
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
+	flag.StringVar(dsn, "d", "", "set database dsn")
 	flag.Parse()
 	return &Variables{
 		Endpoint: func() *string {
@@ -90,6 +93,12 @@ func ParseServerOptions() *Variables {
 				return envVars.Restore
 			}
 			return restore
+		}(),
+		DatabaseDSN: func() *string {
+			if envVars.DatabaseDSN != nil {
+				return envVars.DatabaseDSN
+			}
+			return dsn
 		}(),
 	}
 }
