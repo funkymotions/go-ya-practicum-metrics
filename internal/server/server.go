@@ -46,10 +46,7 @@ func NewServer(v *appenv.Variables) *Server {
 		log.Fatal("database dsn is not set")
 	}
 	dbConf := db.NewDBConfig(*v.DatabaseDSN)
-	d, err := sql.NewSQLDriver(dbConf)
-	if err != nil {
-		log.Fatalf("failed to connect to db: %v", err)
-	}
+	d, _ := sql.NewSQLDriver(dbConf)
 	// logger
 	logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	if err != nil {
