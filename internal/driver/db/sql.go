@@ -23,7 +23,5 @@ func NewSQLDriver(c *db.DBConfig) (*SQLDriver, error) {
 	if err := db.PingContext(ctx); err != nil {
 		return nil, err
 	}
-	return &SQLDriver{
-		DB: db,
-	}, nil
+	return &SQLDriver{DB: db}, nil
 }

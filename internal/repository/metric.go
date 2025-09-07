@@ -3,6 +3,8 @@ package repository
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -124,7 +126,18 @@ func (r *metricRepository) GetAllMetrics() map[string]models.Metrics {
 // donno where to place this method for now
 // repo will be used to host db connection wrapper,
 // so in case of responsility separation it should be rignt place
-func (r *metricRepository) Ping() error {
+// Panic recovery added to avoid server crash in case of empty DSN server init to support older tests
+func (r *metricRepository) Ping() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in Ping", r)
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				err = fmt.Errorf("unknown error: %v", r)
+			}
+		}
+	}()
 	return r.db.DB.Ping()
 }
 

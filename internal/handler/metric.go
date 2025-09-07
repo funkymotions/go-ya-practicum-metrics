@@ -28,17 +28,17 @@ func NewMetricHandler(s metricService) *metricHandler {
 	}
 }
 
-func (m *metricHandler) Register(engine *chi.Mux) {
-	engine.Get("/ping", m.Ping)
+func (h *metricHandler) Register(engine *chi.Mux) {
+	engine.Get("/ping", h.Ping)
 	engine.
 		With(middleware.CompressHandler).
-		Get("/", http.HandlerFunc(m.GetAllMetrics))
-	engine.Get("/value/{type}/{name}", http.HandlerFunc(m.GetMetric))
-	engine.Post("/update/{type}/{name}/{value}", http.HandlerFunc(m.SetMetric))
+		Get("/", http.HandlerFunc(h.GetAllMetrics))
+	engine.Get("/value/{type}/{name}", http.HandlerFunc(h.GetMetric))
+	engine.Post("/update/{type}/{name}/{value}", http.HandlerFunc(h.SetMetric))
 	engine.
 		With(middleware.CompressHandler).
-		Post("/update/", http.HandlerFunc(m.SetMetricByJSON))
+		Post("/update/", http.HandlerFunc(h.SetMetricByJSON))
 	engine.
 		With(middleware.CompressHandler).
-		Post("/value/", http.HandlerFunc(m.GetMetricByJSON))
+		Post("/value/", http.HandlerFunc(h.GetMetricByJSON))
 }
