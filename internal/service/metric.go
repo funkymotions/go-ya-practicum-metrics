@@ -15,6 +15,7 @@ type metricRepoInterface interface {
 	SetCounterIntrospect(name string, parameter int64)
 	GetMetric(name string, metricType string) (*models.Metrics, bool)
 	GetAllMetrics() map[string]models.Metrics
+	SetMetricBulk(m *[]models.Metrics) error
 	Ping() error
 }
 
@@ -58,7 +59,8 @@ func (s *metricService) GetMetric(name string, metricType string) (*models.Metri
 	if !isMetricNameAlphanumeric(name, s.re) {
 		return nil, false
 	}
-	return s.repo.GetMetric(name, metricType)
+	m, res := s.repo.GetMetric(name, metricType)
+	return m, res
 }
 
 func (s *metricService) GetAllMetricsForHTML() string {
@@ -104,6 +106,10 @@ func (s *metricService) GetMetricByModel(metric *models.Metrics) (*models.Metric
 
 func (s *metricService) Ping() error {
 	return s.repo.Ping()
+}
+
+func (s *metricService) SetMetricBulk(m *[]models.Metrics) error {
+	return s.repo.SetMetricBulk(m)
 }
 
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {

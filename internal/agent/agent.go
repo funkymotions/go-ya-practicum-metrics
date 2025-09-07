@@ -96,23 +96,21 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 		case <-ticker.C:
 			m.config.Logger.Info("Sending metrics to server...")
 			m.mu.Lock()
-			for name, metric := range m.metrics {
-				b := prepareMetricBytes(&metric)
-				m.config.Logger.Info("Sending metric", zap.String("name", name), zap.ByteString("body", b))
-				r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(b))
-				if err != nil {
-					m.config.Logger.Error("Error creating request", zap.String("name", name), zap.Error(err))
-					continue
-				}
-				r.Header.Set("Content-Type", contentType)
-				r.Header.Set("Accept-Encoding", "gzip")
-				resp, err := m.config.Client.Do(r)
-				if err != nil {
-					m.config.Logger.Error("Error sending metric", zap.String("name", name), zap.Error(err))
-					continue
-				}
-				resp.Body.Close()
+			body := prepareRequestBody(m.metrics)
+			m.config.Logger.Info("Sending metrics", zap.ByteString("body", body))
+			r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+			if err != nil {
+				m.config.Logger.Error("Error creating request", zap.Error(err))
+				continue
 			}
+			r.Header.Set("Content-Type", contentType)
+			r.Header.Set("Accept-Encoding", "gzip")
+			resp, err := m.config.Client.Do(r)
+			if err != nil {
+				m.config.Logger.Error("Error sending metrics", zap.Error(err))
+				continue
+			}
+			resp.Body.Close()
 			m.mu.Unlock()
 		case <-stop:
 			return
@@ -167,7 +165,11 @@ func getGaugeMetricModel(name string, stats runtime.MemStats, g getter) models.M
 	}
 }
 
-func prepareMetricBytes(m *models.Metrics) []byte {
-	jsonData, _ := json.Marshal(m)
+func prepareRequestBody(m map[string]models.Metrics) []byte {
+	var metrics []models.Metrics
+	for _, metric := range m {
+		metrics = append(metrics, metric)
+	}
+	jsonData, _ := json.Marshal(metrics)
 	return jsonData
 }

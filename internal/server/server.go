@@ -7,7 +7,7 @@ import (
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
-	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
@@ -46,7 +46,7 @@ func NewServer(v *appenv.Variables) *Server {
 		log.Fatal("database dsn is not set")
 	}
 	dbConf := db.NewDBConfig(*v.DatabaseDSN)
-	d, _ := sql.NewSQLDriver(dbConf)
+	d, _ := driver.NewSQLDriver(dbConf)
 	// logger
 	logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	if err != nil {

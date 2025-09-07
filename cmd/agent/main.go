@@ -23,7 +23,7 @@ func main() {
 		MetricURL: url.URL{
 			Scheme: "http",
 			Host:   *options.Endpoint,
-			Path:   "/update/",
+			Path:   "/updates/",
 		},
 		Client: &http.Client{
 			Timeout: 200 * time.Millisecond,

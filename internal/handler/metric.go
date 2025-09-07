@@ -15,6 +15,7 @@ type metricService interface {
 	GetMetricByModel(m *models.Metrics) (*models.Metrics, error)
 	GetMetric(metricType, name string) (*models.Metrics, bool)
 	GetAllMetricsForHTML() string
+	SetMetricBulk(m *[]models.Metrics) error
 	Ping() error
 }
 
@@ -41,4 +42,6 @@ func (h *metricHandler) Register(engine *chi.Mux) {
 	engine.
 		With(middleware.CompressHandler).
 		Post("/value/", http.HandlerFunc(h.GetMetricByJSON))
+	engine.With(middleware.CompressHandler).
+		Post("/updates/", http.HandlerFunc(h.SetMetricBulk))
 }

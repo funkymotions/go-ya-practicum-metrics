@@ -46,6 +46,11 @@ func (m *metricRepoStub) Ping() error {
 	return args.Error(0)
 }
 
+func (m *metricRepoStub) SetMetricBulk(metrics *[]models.Metrics) error {
+	args := m.Called(metrics)
+	return args.Error(0)
+}
+
 func TestNewMetricService(t *testing.T) {
 	type args struct {
 		repo metricRepoInterface

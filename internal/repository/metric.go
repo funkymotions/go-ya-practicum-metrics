@@ -3,14 +3,14 @@ package repository
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
 
-	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/golang-migrate/migrate/v4"
@@ -27,17 +27,18 @@ type metricRepository struct {
 	filePath      string
 	stopCh        chan struct{}
 	doneCh        chan struct{}
-	driver        *sql.SQLDriver
+	driver        *driver.SQLDriver
 	logger        *zap.Logger
 	gaugeTypeID   uint
 	counterTypeID uint
+	metricTypes   map[uint]string
 }
 
 func NewMetricRepository(
 	filePath string,
 	isRestoreNeeded bool,
 	writeInterval time.Duration,
-	db *sql.SQLDriver,
+	db *driver.SQLDriver,
 	stopCh chan struct{},
 	doneCh chan struct{},
 
@@ -83,6 +84,7 @@ func (r *metricRepository) SetGaugeIntrospect(name string, value float64) {
 		r.SetGauge(name, value)
 	} else {
 		err := r.upsertMetric(
+			nil,
 			&models.Metrics{
 				ID:    name,
 				MType: models.Gauge,
@@ -103,6 +105,7 @@ func (r *metricRepository) SetCounterIntrospect(name string, delta int64) {
 		r.SetCounter(name, delta)
 	} else {
 		err := r.upsertMetric(
+			nil,
 			&models.Metrics{
 				ID:    name,
 				MType: models.Counter,
@@ -169,6 +172,26 @@ func (r *metricRepository) GetMetric(name string, metricType string) (*models.Me
 	defer r.mu.RUnlock()
 	key := metricType + ":" + name
 	m, exists := r.memStorage[key]
+	if !exists && r.driver != nil {
+		var typeID uint
+		switch metricType {
+		case models.Gauge:
+			typeID = r.gaugeTypeID
+		case models.Counter:
+			typeID = r.counterTypeID
+		default:
+			return nil, false
+		}
+		metric, err := r.readMetricFromDB(&models.Metrics{
+			ID:      name,
+			MTypeID: typeID,
+		})
+		if err != nil {
+			return nil, false
+		}
+		m = *metric
+		exists = true
+	}
 	return &m, exists
 }
 
@@ -178,25 +201,76 @@ func (r *metricRepository) GetAllMetrics() map[string]models.Metrics {
 	return r.memStorage
 }
 
+func (r *metricRepository) SetMetricBulk(m *[]models.Metrics) error {
+	if r.driver == nil {
+		for _, metric := range *m {
+			switch metric.MType {
+			case models.Gauge:
+				r.SetGauge(metric.ID, *metric.Value)
+			case models.Counter:
+				r.SetCounter(metric.ID, *metric.Delta)
+			}
+		}
+	} else {
+		tx, err := r.driver.DB.Begin()
+		defer func() {
+			if err != nil {
+				if rbErr := tx.Rollback(); rbErr != nil {
+					r.logger.Error("tx rollback error:", zap.Error(rbErr))
+				}
+				return
+			}
+			if err := tx.Commit(); err != nil {
+				r.logger.Error("Error committing transaction:", zap.Error(err))
+			}
+		}()
+		if err != nil {
+			r.logger.Error("Error beginning transaction:", zap.Error(err))
+			return err
+		}
+		for _, metric := range *m {
+			err := r.upsertMetric(tx, &metric)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // donno where to place this method for now
 // repo will be used to host db connection wrapper,
 // so in case of responsility separation it should be rignt place
 // Panic recovery added to avoid server crash in case of empty DSN server init to support older tests
 func (r *metricRepository) Ping() (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			log.Println("Recovered in Ping", r)
-			if e, ok := r.(error); ok {
+		if rec := recover(); rec != nil {
+			r.logger.Error("Recovered in Ping", zap.Any("panic", rec))
+			if e, ok := rec.(error); ok {
 				err = e
 			} else {
-				err = fmt.Errorf("unknown error: %v", r)
+				err = fmt.Errorf("unknown error: %v", rec)
 			}
 		}
 	}()
 	return r.driver.DB.Ping()
 }
 
-func (r *metricRepository) upsertMetric(m *models.Metrics) error {
+func (r *metricRepository) readMetricFromDB(m *models.Metrics) (*models.Metrics, error) {
+	if r.driver == nil {
+		return nil, fmt.Errorf("DB is not initialized")
+	}
+	sql := "SELECT id, metric_type_id, delta, value FROM metrics WHERE id=$1 AND metric_type_id=$2 LIMIT 1;"
+	row := r.driver.DB.QueryRow(sql, m.ID, m.MTypeID)
+	var result models.Metrics
+	if err := row.Scan(&result.ID, &result.MTypeID, &result.Delta, &result.Value); err != nil {
+		return nil, err
+	}
+	result.MType = r.metricTypes[result.MTypeID]
+	return &result, nil
+}
+
+func (r *metricRepository) upsertMetric(tx *sql.Tx, m *models.Metrics) error {
 	if r.driver == nil {
 		return fmt.Errorf("DB is not initialized")
 	}
@@ -218,9 +292,8 @@ func (r *metricRepository) upsertMetric(m *models.Metrics) error {
 				($1, $2, $3)
 			ON CONFLICT (id, metric_type_id)
 			DO UPDATE SET
-				delta = EXCLUDED.delta,
-				updated_at = NOW()
-			;
+				delta = metrics.delta + EXCLUDED.delta,
+				updated_at = NOW();
 		`
 	case models.Gauge:
 		value = m.Value
@@ -234,12 +307,16 @@ func (r *metricRepository) upsertMetric(m *models.Metrics) error {
 			ON CONFLICT (id, metric_type_id)
 			DO UPDATE SET
 				value = EXCLUDED.value,
-				updated_at = NOW()
-			;
+				updated_at = NOW();
 		`
 	}
-	_, err := r.driver.DB.ExecContext(ctx, query, m.ID, typeID, value)
-	return err
+	if tx != nil {
+		_, err := tx.Exec(query, m.ID, typeID, value)
+		return err
+	} else {
+		_, err := r.driver.DB.ExecContext(ctx, query, m.ID, typeID, value)
+		return err
+	}
 }
 
 func (r *metricRepository) writeMetricsToFile() error {
@@ -350,5 +427,9 @@ func (r *metricRepository) cacheMetricTypeIDs() error {
 		zap.Uint("gauge_type_id", r.gaugeTypeID),
 		zap.Uint("counter_type_id", r.counterTypeID),
 	)
+	r.metricTypes = map[uint]string{
+		r.gaugeTypeID:   models.Gauge,
+		r.counterTypeID: models.Counter,
+	}
 	return nil
 }
