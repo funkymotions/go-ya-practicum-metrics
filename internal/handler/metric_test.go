@@ -38,6 +38,16 @@ func (m *metricServiceStub) GetAllMetricsForHTML() string {
 	return args.Get(0).(string)
 }
 
+func (m *metricServiceStub) SetMetricByModel(metric *models.Metrics) error {
+	args := m.Called(metric)
+	return args.Error(0)
+}
+
+func (m *metricServiceStub) GetMetricByModel(metric *models.Metrics) (*models.Metrics, error) {
+	args := m.Called(metric)
+	return args.Get(0).(*models.Metrics), args.Error(1)
+}
+
 func TestNewMetricHandler(t *testing.T) {
 	type args struct {
 		s metricService
