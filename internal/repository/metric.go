@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,7 +11,13 @@ import (
 	"time"
 
 	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
+	"go.uber.org/zap"
 )
 
 type metricRepository struct {
@@ -20,7 +27,10 @@ type metricRepository struct {
 	filePath      string
 	stopCh        chan struct{}
 	doneCh        chan struct{}
-	db            *sql.SQLDriver
+	driver        *sql.SQLDriver
+	logger        *zap.Logger
+	gaugeTypeID   uint
+	counterTypeID uint
 }
 
 func NewMetricRepository(
@@ -32,14 +42,16 @@ func NewMetricRepository(
 	doneCh chan struct{},
 
 ) *metricRepository {
+	l, _ := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	r := &metricRepository{
 		memStorage:    make(map[string]models.Metrics),
 		mu:            sync.RWMutex{},
 		writeInterval: writeInterval,
 		filePath:      filePath,
-		db:            db,
+		driver:        db,
 		stopCh:        stopCh,
 		doneCh:        doneCh,
+		logger:        l,
 	}
 	if isRestoreNeeded {
 		r.readMetricsFromFile()
@@ -59,7 +71,50 @@ func NewMetricRepository(
 			}
 		}()
 	}
+	if db != nil {
+		r.initDBSchema()
+	}
 	return r
+}
+
+func (r *metricRepository) SetGaugeIntrospect(name string, value float64) {
+	if r.driver == nil {
+		r.logger.Warn("DB is not initialized. Continuing...")
+		r.SetGauge(name, value)
+	} else {
+		err := r.upsertMetric(
+			&models.Metrics{
+				ID:    name,
+				MType: models.Gauge,
+				Value: &value,
+				Hash:  "",
+			})
+		if err != nil {
+			r.logger.Error("Error upserting gauge metric to DB:", zap.Error(err))
+		}
+		// fallback to in-memory storage
+		r.SetGauge(name, value)
+	}
+}
+
+func (r *metricRepository) SetCounterIntrospect(name string, delta int64) {
+	if r.driver == nil {
+		r.logger.Warn("DB is not initialized. Continuing...")
+		r.SetCounter(name, delta)
+	} else {
+		err := r.upsertMetric(
+			&models.Metrics{
+				ID:    name,
+				MType: models.Counter,
+				Delta: &delta,
+				Hash:  "",
+			})
+		if err != nil {
+			r.logger.Error("Error upserting counter metric to DB:", zap.Error(err))
+		}
+		// fallback to in-memory storage
+		r.SetCounter(name, delta)
+	}
 }
 
 func (r *metricRepository) SetGauge(name string, value float64) {
@@ -138,7 +193,53 @@ func (r *metricRepository) Ping() (err error) {
 			}
 		}
 	}()
-	return r.db.DB.Ping()
+	return r.driver.DB.Ping()
+}
+
+func (r *metricRepository) upsertMetric(m *models.Metrics) error {
+	if r.driver == nil {
+		return fmt.Errorf("DB is not initialized")
+	}
+	r.logger.Info("Upserting metric to DB", zap.String("metric", m.String()))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var query string
+	var typeID uint
+	var value interface{}
+	switch m.MType {
+	case models.Counter:
+		typeID = r.counterTypeID
+		value = m.Delta
+		query = `
+			INSERT INTO
+			metrics
+				(id, metric_type_id, delta)
+			VALUES
+				($1, $2, $3)
+			ON CONFLICT (id, metric_type_id)
+			DO UPDATE SET
+				delta = EXCLUDED.delta,
+				updated_at = NOW()
+			;
+		`
+	case models.Gauge:
+		value = m.Value
+		typeID = r.gaugeTypeID
+		query = `
+			INSERT INTO
+			metrics
+				(id, metric_type_id, value)
+			VALUES
+				($1, $2, $3)
+			ON CONFLICT (id, metric_type_id)
+			DO UPDATE SET
+				value = EXCLUDED.value,
+				updated_at = NOW()
+			;
+		`
+	}
+	_, err := r.driver.DB.ExecContext(ctx, query, m.ID, typeID, value)
+	return err
 }
 
 func (r *metricRepository) writeMetricsToFile() error {
@@ -183,5 +284,71 @@ func (r *metricRepository) readMetricsFromFile() error {
 		key := m.MType + ":" + m.ID
 		r.memStorage[key] = m
 	}
+	return nil
+}
+
+func (r *metricRepository) initDBSchema() {
+	if r.driver == nil {
+		r.logger.Warn("DB can not be initialized")
+		return
+	}
+	driver, err := postgres.WithInstance(r.driver.DB, &postgres.Config{})
+	if err != nil {
+		r.logger.Error("Error creating migrate postgres instance:", zap.Error(err))
+		return
+	}
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://migrations",
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		r.logger.Error("Error creating golang-migrate instance:", zap.Error(err))
+		return
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		r.logger.Error("Error applying migrations:", zap.Error(err))
+		return
+	}
+	r.cacheMetricTypeIDs()
+	r.logger.Info("Database migrations applied successfully")
+}
+
+func (r *metricRepository) cacheMetricTypeIDs() error {
+	if r.driver == nil {
+		err := fmt.Errorf("DB is not initialized")
+		r.logger.Error("Error caching metric type IDs", zap.Error(err))
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	query := `SELECT id, metric_type FROM metric_types;`
+	rows, err := r.driver.DB.QueryContext(ctx, query)
+	if err != nil {
+		r.logger.Error("Error querying metric types:", zap.Error(err))
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uint
+		var typeName string
+		if err := rows.Scan(&id, &typeName); err != nil {
+			return err
+		}
+		switch typeName {
+		case models.Gauge:
+			r.gaugeTypeID = id
+		case models.Counter:
+			r.counterTypeID = id
+		}
+	}
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error scanning metric types:", zap.Error(err))
+		return err
+	}
+	r.logger.Info("Cached metric type IDs",
+		zap.Uint("gauge_type_id", r.gaugeTypeID),
+		zap.Uint("counter_type_id", r.counterTypeID),
+	)
 	return nil
 }
