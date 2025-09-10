@@ -10,12 +10,8 @@ import (
 	"sync"
 	"time"
 
-<<<<<<< Updated upstream
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
-=======
-	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
->>>>>>> Stashed changes
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -31,26 +27,18 @@ type metricRepository struct {
 	filePath      string
 	stopCh        chan struct{}
 	doneCh        chan struct{}
-<<<<<<< Updated upstream
 	driver        *driver.SQLDriver
 	logger        *zap.Logger
 	gaugeTypeID   uint
 	counterTypeID uint
 	metricTypes   map[uint]string
-=======
-	db            *sql.SQLDriver
->>>>>>> Stashed changes
 }
 
 func NewMetricRepository(
 	filePath string,
 	isRestoreNeeded bool,
 	writeInterval time.Duration,
-<<<<<<< Updated upstream
 	db *driver.SQLDriver,
-=======
-	db *sql.SQLDriver,
->>>>>>> Stashed changes
 	stopCh chan struct{},
 	doneCh chan struct{},
 
@@ -61,11 +49,7 @@ func NewMetricRepository(
 		mu:            sync.RWMutex{},
 		writeInterval: writeInterval,
 		filePath:      filePath,
-<<<<<<< Updated upstream
 		driver:        db,
-=======
-		db:            db,
->>>>>>> Stashed changes
 		stopCh:        stopCh,
 		doneCh:        doneCh,
 		logger:        l,
@@ -333,11 +317,6 @@ func (r *metricRepository) upsertMetric(tx *sql.Tx, m *models.Metrics) error {
 		_, err := r.driver.DB.ExecContext(ctx, query, m.ID, typeID, value)
 		return err
 	}
-// donno where to place this method for now
-// repo will be used to host db connection wrapper,
-// so in case of responsility separation it should be rignt place
-func (r *metricRepository) Ping() error {
-	return r.db.DB.Ping()
 }
 
 func (r *metricRepository) writeMetricsToFile() error {

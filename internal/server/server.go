@@ -1,18 +1,13 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
-<<<<<<< Updated upstream
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
-=======
-	sql "github.com/funkymotions/go-ya-practicum-metrics/internal/driver/db"
->>>>>>> Stashed changes
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
