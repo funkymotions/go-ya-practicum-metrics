@@ -108,10 +108,13 @@ func (s *metricService) Ping() error {
 	return s.repo.Ping()
 }
 
+<<<<<<< Updated upstream
 func (s *metricService) SetMetricBulk(m *[]models.Metrics) error {
 	return s.repo.SetMetricBulk(m)
 }
 
+=======
+>>>>>>> Stashed changes
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {
 	return r.MatchString(input)
 }

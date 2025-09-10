@@ -1,10 +1,8 @@
 package handler
 
-import (
-	"net/http"
-)
+import "net/http"
 
-func (h *metricHandler) Ping(w http.ResponseWriter, r *http.Request) {
+func (h metricHandler) Ping(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Ping(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
