@@ -100,6 +100,7 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 			m.config.Logger.Info("Sending metrics", zap.ByteString("body", body))
 			r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
 			if err != nil {
+				m.mu.Unlock()
 				m.config.Logger.Error("Error creating request", zap.Error(err))
 				continue
 			}
@@ -108,6 +109,7 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 			resp, err := m.config.Client.Do(r)
 			if err != nil {
 				m.config.Logger.Error("Error sending metrics", zap.Error(err))
+				m.mu.Unlock()
 				continue
 			}
 			resp.Body.Close()
