@@ -54,6 +54,10 @@ func NewMetricRepository(
 		doneCh:        doneCh,
 		logger:        l,
 	}
+	if db != nil {
+		r.initDBSchema()
+		r.cacheMetricTypeIDs()
+	}
 	if isRestoreNeeded {
 		r.readMetricsFromFile()
 	}
@@ -71,9 +75,6 @@ func NewMetricRepository(
 				}
 			}
 		}()
-	}
-	if db != nil {
-		r.initDBSchema()
 	}
 	return r
 }
@@ -364,6 +365,7 @@ func (r *metricRepository) readMetricsFromFile() error {
 	return nil
 }
 
+// TODO: move to cmd/migrator/main.go
 func (r *metricRepository) initDBSchema() {
 	if r.driver == nil {
 		r.logger.Warn("DB can not be initialized")
@@ -387,7 +389,6 @@ func (r *metricRepository) initDBSchema() {
 		r.logger.Error("Error applying migrations:", zap.Error(err))
 		return
 	}
-	r.cacheMetricTypeIDs()
 	r.logger.Info("Database migrations applied successfully")
 }
 
