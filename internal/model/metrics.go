@@ -26,11 +26,11 @@ type Metrics struct {
 
 func (m *Metrics) String() string {
 	if m.MType == Counter {
-		return fmt.Sprintf("%s-%d", m.ID, *m.Delta)
+		return fmt.Sprintf("%d", *m.Delta)
 	}
 	if m.MType == Gauge {
 		str := strconv.FormatFloat(*m.Value, 'f', -1, 64)
-		return fmt.Sprintf("%s-%s", m.ID, str)
+		return str
 	}
 	return ""
 }
