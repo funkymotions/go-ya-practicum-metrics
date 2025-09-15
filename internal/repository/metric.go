@@ -35,8 +35,8 @@ func (e *NonRetriablePgError) Unwrap() error {
 	return e.err
 }
 
-func (r *NonRetriablePgError) Error() string {
-	return r.err.Error()
+func (e *NonRetriablePgError) Error() string {
+	return e.err.Error()
 }
 
 type RetriablePgError struct {
@@ -51,8 +51,8 @@ func (e *RetriablePgError) Unwrap() error {
 	return e.err
 }
 
-func (r *RetriablePgError) Error() string {
-	return r.err.Error()
+func (e *RetriablePgError) Error() string {
+	return e.err.Error()
 }
 
 type metricRepository struct {
