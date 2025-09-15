@@ -12,6 +12,7 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 )
 
@@ -70,7 +71,6 @@ func Test_agent_sendMetrics(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		isServerWasCalled = true
 	}))
-
 	testServerURL, _ := url.Parse(ts.URL)
 	defer ts.Close()
 	type fields struct {
@@ -107,7 +107,7 @@ func Test_agent_sendMetrics(t *testing.T) {
 					MetricURL: url.URL{
 						Scheme: "http",
 						Host:   testServerURL.Host,
-						Path:   "/update/metric",
+						Path:   "/metric",
 					},
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 100 * time.Millisecond,
@@ -163,7 +163,6 @@ func Test_agent_collectMetrics(t *testing.T) {
 			},
 		},
 	}
-
 	for i := range tests {
 		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
@@ -176,6 +175,69 @@ func Test_agent_collectMetrics(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			result := len(m.metrics)
 			require.NotEqual(t, result, 0, "Expected metrics to be collected")
+		})
+	}
+}
+
+type performRequestTestSuite struct {
+	suite.Suite
+	agent *agent
+}
+
+func Test_performRequestTestSuite(t *testing.T) {
+	suite.Run(t, new(performRequestTestSuite))
+}
+
+func (s *performRequestTestSuite) SetupTest() {
+	retries := 3
+	s.agent = &agent{
+		config: &Config{
+			Logger: zap.NewNop(),
+			Client: &http.Client{
+				Timeout: 1 * time.Second,
+			},
+			PollInterval:   50 * time.Millisecond,
+			ReportInterval: 100 * time.Millisecond,
+			MaxRetries:     &retries,
+		},
+		metrics: map[string]models.Metrics{},
+	}
+}
+
+func (s *performRequestTestSuite) Test_performRequest() {
+	handerOK := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}
+	handlerErr := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		wantErr bool
+	}{
+		{
+			name:    "should perform request successfully",
+			handler: handerOK,
+			wantErr: false,
+		},
+		{
+			name:    "should fail to perform request",
+			handler: handlerErr,
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			ts := httptest.NewServer(http.HandlerFunc(test.handler))
+			err := s.agent.performRequest(ts.URL)
+			if test.wantErr {
+				s.Require().Error(err)
+			} else {
+				s.Assert().NoError(err)
+			}
+			ts.Close()
 		})
 	}
 }

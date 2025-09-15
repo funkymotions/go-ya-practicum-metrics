@@ -17,19 +17,21 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to create logger")
 	}
+	maxRetrySendCount := 3
 	options := env.ParseAgentOptions()
 	agent := agent.NewAgent(&agent.Config{
 		Logger: l,
 		MetricURL: url.URL{
 			Scheme: "http",
 			Host:   *options.Endpoint,
-			Path:   "/update/",
+			Path:   "/updates/",
 		},
 		Client: &http.Client{
 			Timeout: 200 * time.Millisecond,
 		},
 		PollInterval:   time.Duration(*options.PollInterval) * time.Second,
 		ReportInterval: time.Duration(*options.ReportInterval) * time.Second,
+		MaxRetries:     &maxRetrySendCount,
 	})
 	agent.Launch()
 }

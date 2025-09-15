@@ -33,6 +33,26 @@ func (m *metricRepoStub) GetAllMetrics() map[string]models.Metrics {
 	return args.Get(0).(map[string]models.Metrics)
 }
 
+func (m *metricRepoStub) SetGaugeIntrospect(name string, value float64) error {
+	args := m.Called(name, value)
+	return args.Error(0)
+}
+
+func (m *metricRepoStub) SetCounterIntrospect(name string, value int64) error {
+	args := m.Called(name, value)
+	return args.Error(0)
+}
+
+func (m *metricRepoStub) Ping() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *metricRepoStub) SetMetricBulk(metrics *[]models.Metrics) error {
+	args := m.Called(metrics)
+	return args.Error(0)
+}
+
 func TestNewMetricService(t *testing.T) {
 	type args struct {
 		repo metricRepoInterface
@@ -106,7 +126,7 @@ func Test_metricService_SetCounter(t *testing.T) {
 				repo: tt.fields.repo,
 				re:   re,
 			}
-			s.repo.(*metricRepoStub).On("SetCounter", tt.args.name, int64(1)).Return(nil)
+			s.repo.(*metricRepoStub).On("SetCounterIntrospect", tt.args.name, int64(1)).Return(nil)
 			err := s.SetCounter(tt.args.name, tt.args.rawValue)
 			assert.Equal(t, tt.wantError, err != nil)
 		})
@@ -158,7 +178,7 @@ func Test_metricService_SetGauge(t *testing.T) {
 				re:   re,
 			}
 
-			s.repo.(*metricRepoStub).On("SetGauge", tt.args.name, float64(1.1)).Return(nil)
+			s.repo.(*metricRepoStub).On("SetGaugeIntrospect", tt.args.name, float64(1.1)).Return(nil)
 			err := s.SetGauge(tt.args.name, tt.args.rawValue)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
