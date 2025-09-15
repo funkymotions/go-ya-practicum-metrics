@@ -17,6 +17,7 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to create logger")
 	}
+	maxRetrySendCount := 3
 	options := env.ParseAgentOptions()
 	agent := agent.NewAgent(&agent.Config{
 		Logger: l,
@@ -30,6 +31,7 @@ func main() {
 		},
 		PollInterval:   time.Duration(*options.PollInterval) * time.Second,
 		ReportInterval: time.Duration(*options.ReportInterval) * time.Second,
+		MaxRetries:     &maxRetrySendCount,
 	})
 	agent.Launch()
 }

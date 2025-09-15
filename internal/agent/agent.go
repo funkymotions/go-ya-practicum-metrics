@@ -3,6 +3,8 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -51,9 +53,10 @@ var getters = map[string]getter{
 }
 
 type agent struct {
-	config  *Config
-	metrics map[string]models.Metrics
-	mu      sync.Mutex
+	config        *Config
+	metrics       map[string]models.Metrics
+	mu            sync.Mutex
+	cachedRequest *http.Request
 }
 
 type Config struct {
@@ -62,6 +65,23 @@ type Config struct {
 	ReportInterval time.Duration
 	MetricURL      url.URL
 	Logger         *zap.Logger
+	MaxRetries     *int
+}
+
+type retriableError struct {
+	err error
+}
+
+func newRetriableError(err error) *retriableError {
+	return &retriableError{err: err}
+}
+
+func (r *retriableError) Error() string {
+	return r.err.Error()
+}
+
+func (r *retriableError) Unwrap() error {
+	return r.err
 }
 
 func NewAgent(cfg *Config) *agent {
@@ -94,30 +114,39 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			m.config.Logger.Info("Sending metrics to server...")
-			m.mu.Lock()
-			body := prepareRequestBody(m.metrics)
-			m.config.Logger.Info("Sending metrics", zap.ByteString("body", body))
-			r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
-			if err != nil {
-				m.mu.Unlock()
-				m.config.Logger.Error("Error creating request", zap.Error(err))
-				continue
-			}
-			r.Header.Set("Content-Type", contentType)
-			r.Header.Set("Accept-Encoding", "gzip")
-			resp, err := m.config.Client.Do(r)
-			if err != nil {
-				m.config.Logger.Error("Error sending metrics", zap.Error(err))
-				m.mu.Unlock()
-				continue
-			}
-			resp.Body.Close()
-			m.mu.Unlock()
+			withRetry(func() error {
+				return m.performRequest(url)
+			}, 0, m.config.MaxRetries)
 		case <-stop:
 			return
 		}
 	}
+}
+
+func (m *agent) performRequest(url string) (err error) {
+	defer m.mu.Unlock()
+	m.config.Logger.Info("Sending metrics to server...")
+	m.mu.Lock()
+	body := prepareRequestBody(m.metrics)
+	m.config.Logger.Info("Sending metrics", zap.ByteString("body", body))
+	r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		m.config.Logger.Error("Error creating request", zap.Error(err))
+		return newRetriableError(err)
+	}
+	r.Header.Set("Content-Type", contentType)
+	r.Header.Set("Accept-Encoding", "gzip")
+	resp, err := m.config.Client.Do(r)
+	if err != nil {
+		m.config.Logger.Error("Error sending metrics", zap.Error(err))
+		return newRetriableError(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		m.config.Logger.Error("Non-OK HTTP status", zap.Int("status", resp.StatusCode))
+		return newRetriableError(fmt.Errorf("non-OK HTTP status: %s", resp.Status))
+	}
+	resp.Body.Close()
+	return nil
 }
 
 func (m *agent) collectMetrics(stop chan struct{}) {
@@ -126,10 +155,10 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			m.config.Logger.Info("Collecting metrics...")
 			var memStats runtime.MemStats
 			runtime.ReadMemStats(&memStats)
 			m.mu.Lock()
+			m.config.Logger.Info("Collecting metrics...")
 			for key, getter := range getters {
 				m.metrics[key] = getGaugeMetricModel(key, memStats, getter)
 			}
@@ -174,4 +203,25 @@ func prepareRequestBody(m map[string]models.Metrics) []byte {
 	}
 	jsonData, _ := json.Marshal(metrics)
 	return jsonData
+}
+
+func withRetry(fn func() error, attempts int, maxAttempts *int) error {
+	// no retry
+	if maxAttempts == nil {
+		return fn()
+	}
+	// stop retrying due to no attempts left
+	if attempts >= *maxAttempts {
+		return fmt.Errorf("max retry attempts reached")
+	}
+	secondsToSleep := time.Duration(2*(attempts)+1) * time.Second
+	var retriableErr *retriableError
+	if err := fn(); err != nil {
+		if errors.As(err, &retriableErr) {
+			time.Sleep(secondsToSleep)
+			return withRetry(fn, attempts+1, maxAttempts)
+		}
+		return err
+	}
+	return nil
 }

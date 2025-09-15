@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -16,9 +17,43 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgerrcode"
+	"github.com/lib/pq"
 
 	"go.uber.org/zap"
 )
+
+type NonRetriablePgError struct {
+	err error
+}
+
+func NewNonRetriablePgError(err error) *NonRetriablePgError {
+	return &NonRetriablePgError{err: err}
+}
+
+func (e *NonRetriablePgError) Unwrap() error {
+	return e.err
+}
+
+func (r *NonRetriablePgError) Error() string {
+	return r.err.Error()
+}
+
+type RetriablePgError struct {
+	err error
+}
+
+func NewRetriablePgError(err error) *RetriablePgError {
+	return &RetriablePgError{err: err}
+}
+
+func (e *RetriablePgError) Unwrap() error {
+	return e.err
+}
+
+func (r *RetriablePgError) Error() string {
+	return r.err.Error()
+}
 
 type metricRepository struct {
 	memStorage    map[string]models.Metrics
@@ -79,46 +114,68 @@ func NewMetricRepository(
 	return r
 }
 
-func (r *metricRepository) SetGaugeIntrospect(name string, value float64) {
+func (r *metricRepository) SetGaugeIntrospect(name string, value float64) error {
+	var err error
+	defer func() {
+		if err != nil {
+			// fallback to in-memory storage
+			r.SetGauge(name, value)
+		}
+	}()
 	if r.driver == nil {
 		r.logger.Warn("DB is not initialized. Continuing...")
-		r.SetGauge(name, value)
+		err = NewNonRetriablePgError(errors.New("DB is not initialized"))
 	} else {
-		err := r.upsertMetric(
+		err = r.upsertMetric(
 			nil,
 			&models.Metrics{
 				ID:    name,
 				MType: models.Gauge,
 				Value: &value,
 				Hash:  "",
-			})
-		if err != nil {
-			r.logger.Error("Error upserting gauge metric to DB:", zap.Error(err))
+			},
+		)
+		var pqError *pq.Error
+		if err != nil && errors.As(err, &pqError) {
+			pgErr := err.(*pq.Error)
+			if pgerrcode.IsConnectionException(string(pgErr.Code)) {
+				err = NewRetriablePgError(err)
+			}
 		}
-		// fallback to in-memory storage
-		r.SetGauge(name, value)
 	}
+	return err
 }
 
-func (r *metricRepository) SetCounterIntrospect(name string, delta int64) {
+func (r *metricRepository) SetCounterIntrospect(name string, delta int64) error {
+	var err error
+	defer func() {
+		if err != nil {
+			// fallback to in-memory storage
+			r.SetCounter(name, delta)
+		}
+	}()
 	if r.driver == nil {
 		r.logger.Warn("DB is not initialized. Continuing...")
-		r.SetCounter(name, delta)
+		err = NewNonRetriablePgError(errors.New("DB is not initialized"))
 	} else {
-		err := r.upsertMetric(
+		err = r.upsertMetric(
 			nil,
 			&models.Metrics{
 				ID:    name,
 				MType: models.Counter,
 				Delta: &delta,
 				Hash:  "",
-			})
-		if err != nil {
-			r.logger.Error("Error upserting counter metric to DB:", zap.Error(err))
+			},
+		)
+		var pqError *pq.Error
+		if errors.Is(err, pqError) {
+			pgErr := err.(*pq.Error)
+			if pgerrcode.IsConnectionException(string(pgErr.Code)) {
+				err = NewRetriablePgError(err)
+			}
 		}
-		// fallback to in-memory storage
-		r.SetCounter(name, delta)
 	}
+	return err
 }
 
 func (r *metricRepository) SetGauge(name string, value float64) {
@@ -171,9 +228,7 @@ func (r *metricRepository) SetCounter(name string, delta int64) {
 func (r *metricRepository) GetMetric(name string, metricType string) (*models.Metrics, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	key := metricType + ":" + name
-	m, exists := r.memStorage[key]
-	if !exists && r.driver != nil {
+	if r.driver != nil {
 		var typeID uint
 		switch metricType {
 		case models.Gauge:
@@ -183,16 +238,18 @@ func (r *metricRepository) GetMetric(name string, metricType string) (*models.Me
 		default:
 			return nil, false
 		}
-		metric, err := r.readMetricFromDB(&models.Metrics{
-			ID:      name,
-			MTypeID: typeID,
-		})
+		metric, err := r.readMetricFromDB(
+			&models.Metrics{
+				ID:      name,
+				MTypeID: typeID,
+			})
 		if err != nil {
 			return nil, false
 		}
-		m = *metric
-		exists = true
+		return metric, true
 	}
+	key := metricType + ":" + name
+	m, exists := r.memStorage[key]
 	return &m, exists
 }
 

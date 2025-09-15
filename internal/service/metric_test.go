@@ -33,12 +33,14 @@ func (m *metricRepoStub) GetAllMetrics() map[string]models.Metrics {
 	return args.Get(0).(map[string]models.Metrics)
 }
 
-func (m *metricRepoStub) SetGaugeIntrospect(name string, value float64) {
-	m.Called(name, value)
+func (m *metricRepoStub) SetGaugeIntrospect(name string, value float64) error {
+	args := m.Called(name, value)
+	return args.Error(0)
 }
 
-func (m *metricRepoStub) SetCounterIntrospect(name string, value int64) {
-	m.Called(name, value)
+func (m *metricRepoStub) SetCounterIntrospect(name string, value int64) error {
+	args := m.Called(name, value)
+	return args.Error(0)
 }
 
 func (m *metricRepoStub) Ping() error {
