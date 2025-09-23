@@ -13,6 +13,7 @@ type metricRepoInterface interface {
 	SetCounter(name string, parameter int64)
 	GetMetric(name string, metricType string) (*models.Metrics, bool)
 	GetAllMetrics() map[string]models.Metrics
+	Ping() error
 }
 
 type metricService struct {
@@ -97,6 +98,10 @@ func (s *metricService) GetMetricByModel(metric *models.Metrics) (*models.Metric
 		return nil, fmt.Errorf("metric not found: %s", metric.ID)
 	}
 	return m, nil
+}
+
+func (s *metricService) Ping() error {
+	return s.repo.Ping()
 }
 
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {
