@@ -11,8 +11,11 @@ import (
 type metricRepoInterface interface {
 	SetGauge(name string, parameter float64)
 	SetCounter(name string, parameter int64)
+	SetGaugeIntrospect(name string, parameter float64)
+	SetCounterIntrospect(name string, parameter int64)
 	GetMetric(name string, metricType string) (*models.Metrics, bool)
 	GetAllMetrics() map[string]models.Metrics
+	Ping() error
 }
 
 type metricService struct {
@@ -35,7 +38,7 @@ func (s *metricService) SetCounter(name string, rawValue string) error {
 	if err != nil {
 		return err
 	}
-	s.repo.SetCounter(name, value)
+	s.repo.SetCounterIntrospect(name, value)
 	return nil
 }
 
@@ -47,7 +50,7 @@ func (s *metricService) SetGauge(name string, rawValue string) error {
 	if err != nil {
 		return err
 	}
-	s.repo.SetGauge(name, value)
+	s.repo.SetGaugeIntrospect(name, value)
 	return nil
 }
 
@@ -76,12 +79,12 @@ func (s *metricService) SetMetricByModel(metric *models.Metrics) error {
 		if metric.Value == nil {
 			return fmt.Errorf("invalid gauge metric: %s", metric.ID)
 		}
-		s.repo.SetGauge(metric.ID, *metric.Value)
+		s.repo.SetGaugeIntrospect(metric.ID, *metric.Value)
 	case models.Counter:
 		if metric.Delta == nil {
 			return fmt.Errorf("invalid counter metric: %s", metric.ID)
 		}
-		s.repo.SetCounter(metric.ID, *metric.Delta)
+		s.repo.SetCounterIntrospect(metric.ID, *metric.Delta)
 	default:
 		return fmt.Errorf("invalid metric type: %s", metric.MType)
 	}
@@ -97,6 +100,10 @@ func (s *metricService) GetMetricByModel(metric *models.Metrics) (*models.Metric
 		return nil, fmt.Errorf("metric not found: %s", metric.ID)
 	}
 	return m, nil
+}
+
+func (s *metricService) Ping() error {
+	return s.repo.Ping()
 }
 
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {
