@@ -48,6 +48,16 @@ func (m *metricServiceStub) GetMetricByModel(metric *models.Metrics) (*models.Me
 	return args.Get(0).(*models.Metrics), args.Error(1)
 }
 
+func (m *metricServiceStub) Ping() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *metricServiceStub) SetMetricBulk(metrics *[]models.Metrics) error {
+	args := m.Called(metrics)
+	return args.Error(0)
+}
+
 func TestNewMetricHandler(t *testing.T) {
 	type args struct {
 		s metricService
