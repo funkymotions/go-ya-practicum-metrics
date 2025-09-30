@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -67,7 +67,7 @@ type Config struct {
 	ReportInterval time.Duration
 	MetricURL      url.URL
 	Logger         *zap.Logger
-	MaxRetries     *int
+	MaxRetries     int
 	Hashing        struct {
 		Key        *string
 		HeaderName string
@@ -120,7 +120,7 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			withRetry(func() error {
+			utils.WithRetry(func() error {
 				return m.performRequest(url)
 			}, 0, m.config.MaxRetries)
 		case <-stop:
@@ -219,25 +219,4 @@ func prepareRequestBody(m map[string]models.Metrics) []byte {
 	}
 	jsonData, _ := json.Marshal(metrics)
 	return jsonData
-}
-
-func withRetry(fn func() error, attempts int, maxAttempts *int) error {
-	// no retry
-	if maxAttempts == nil {
-		return fn()
-	}
-	// stop retrying due to no attempts left
-	if attempts >= *maxAttempts {
-		return fmt.Errorf("max retry attempts reached")
-	}
-	secondsToSleep := time.Duration(2*(attempts)+1) * time.Second
-	var retriableErr *retriableError
-	if err := fn(); err != nil {
-		if errors.As(err, &retriableErr) {
-			time.Sleep(secondsToSleep)
-			return withRetry(fn, attempts+1, maxAttempts)
-		}
-		return err
-	}
-	return nil
 }

@@ -198,7 +198,7 @@ func (s *performRequestTestSuite) SetupTest() {
 			},
 			PollInterval:   50 * time.Millisecond,
 			ReportInterval: 100 * time.Millisecond,
-			MaxRetries:     &retries,
+			MaxRetries:     retries,
 		},
 		metrics: map[string]models.Metrics{},
 	}

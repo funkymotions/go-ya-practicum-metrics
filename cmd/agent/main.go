@@ -31,7 +31,7 @@ func main() {
 		},
 		PollInterval:   time.Duration(*options.PollInterval) * time.Second,
 		ReportInterval: time.Duration(*options.ReportInterval) * time.Second,
-		MaxRetries:     &maxRetrySendCount,
+		MaxRetries:     maxRetrySendCount,
 		Hashing: struct {
 			Key        *string
 			HeaderName string
