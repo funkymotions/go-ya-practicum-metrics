@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -28,9 +29,9 @@ func (m *metricServiceStub) SetGauge(name string, value string) error {
 	return args.Error(0)
 }
 
-func (m *metricServiceStub) GetMetric(name string, metricType string) (*models.Metrics, bool) {
+func (m *metricServiceStub) GetMetric(name string, metricType string) (*models.Metrics, error) {
 	args := m.Called(name, metricType)
-	return args.Get(0).(*models.Metrics), args.Bool(1)
+	return args.Get(0).(*models.Metrics), args.Error(1)
 }
 
 func (m *metricServiceStub) GetAllMetricsForHTML() string {
@@ -38,9 +39,9 @@ func (m *metricServiceStub) GetAllMetricsForHTML() string {
 	return args.Get(0).(string)
 }
 
-func (m *metricServiceStub) SetMetricByModel(metric *models.Metrics) error {
+func (m *metricServiceStub) SetMetricByModel(metric []byte) (*models.Metrics, error) {
 	args := m.Called(metric)
-	return args.Error(0)
+	return args.Get(0).(*models.Metrics), args.Error(1)
 }
 
 func (m *metricServiceStub) GetMetricByModel(metric *models.Metrics) (*models.Metrics, error) {
@@ -53,8 +54,8 @@ func (m *metricServiceStub) Ping() error {
 	return args.Error(0)
 }
 
-func (m *metricServiceStub) SetMetricBulk(metrics *[]models.Metrics) error {
-	args := m.Called(metrics)
+func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte) error {
+	args := m.Called(body, signature)
 	return args.Error(0)
 }
 
@@ -295,7 +296,7 @@ func Test_metricHandler_GetMetric(t *testing.T) {
 		statusCode               int
 		body                     []byte
 		serviceMetricReturnValue *models.Metrics
-		serviceBoolReturnValue   bool
+		serviceReturnValue       error
 	}
 	tests := []struct {
 		name     string
@@ -320,7 +321,7 @@ func Test_metricHandler_GetMetric(t *testing.T) {
 					Value: &metricCounterValue,
 					MType: models.Gauge,
 				},
-				serviceBoolReturnValue: true,
+				serviceReturnValue: nil,
 			},
 		},
 		{
@@ -336,7 +337,9 @@ func Test_metricHandler_GetMetric(t *testing.T) {
 				statusCode:               http.StatusNotFound,
 				body:                     []byte(""),
 				serviceMetricReturnValue: nil,
-				serviceBoolReturnValue:   false,
+				serviceReturnValue: &service.InvalidMetricError{
+					StatusCode: http.StatusNotFound,
+				},
 			},
 		},
 	}
@@ -351,7 +354,7 @@ func Test_metricHandler_GetMetric(t *testing.T) {
 			path := fmt.Sprintf("/value/%s/%s", tt.args.metricType, tt.args.metricName)
 			h.service.(*metricServiceStub).
 				On("GetMetric", tt.args.metricName, tt.args.metricType).
-				Return(tt.expected.serviceMetricReturnValue, tt.expected.serviceBoolReturnValue)
+				Return(tt.expected.serviceMetricReturnValue, tt.expected.serviceReturnValue)
 			resp, err := http.Get(ts.URL + path)
 			if err != nil {
 				t.Fatalf("failed to make request: %v\n", err)

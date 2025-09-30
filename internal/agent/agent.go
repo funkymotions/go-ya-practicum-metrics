@@ -2,6 +2,9 @@ package agent
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,10 +56,9 @@ var getters = map[string]getter{
 }
 
 type agent struct {
-	config        *Config
-	metrics       map[string]models.Metrics
-	mu            sync.Mutex
-	cachedRequest *http.Request
+	config  *Config
+	metrics map[string]models.Metrics
+	mu      sync.Mutex
 }
 
 type Config struct {
@@ -66,6 +68,10 @@ type Config struct {
 	MetricURL      url.URL
 	Logger         *zap.Logger
 	MaxRetries     *int
+	Hashing        struct {
+		Key        *string
+		HeaderName string
+	}
 }
 
 type retriableError struct {
@@ -123,6 +129,12 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	}
 }
 
+func hashBodyByKey(key *string, body []byte) string {
+	hmac := hmac.New(sha256.New, []byte(*key))
+	hmac.Write(body)
+	return hex.EncodeToString(hmac.Sum(nil))
+}
+
 func (m *agent) performRequest(url string) (err error) {
 	defer m.mu.Unlock()
 	m.config.Logger.Info("Sending metrics to server...")
@@ -136,6 +148,10 @@ func (m *agent) performRequest(url string) (err error) {
 	}
 	r.Header.Set("Content-Type", contentType)
 	r.Header.Set("Accept-Encoding", "gzip")
+	if m.config.Hashing.Key != nil && *m.config.Hashing.Key != "" {
+		hValue := hashBodyByKey(m.config.Hashing.Key, body)
+		r.Header.Set(m.config.Hashing.HeaderName, hValue)
+	}
 	resp, err := m.config.Client.Do(r)
 	if err != nil {
 		m.config.Logger.Error("Error sending metrics", zap.Error(err))

@@ -68,14 +68,15 @@ func TestNewMetricService(t *testing.T) {
 				repo: &metricRepoStub{},
 			},
 			want: &metricService{
-				re:   regexp.MustCompile(`^\w+$`),
-				repo: &metricRepoStub{},
+				re:         regexp.MustCompile(`^\w+$`),
+				repo:       &metricRepoStub{},
+				hashSecret: []byte(""),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := NewMetricService(tt.args.repo)
+			actual := NewMetricService(tt.args.repo, []byte(""))
 			require.True(t, reflect.DeepEqual(actual, tt.want))
 		})
 	}
