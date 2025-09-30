@@ -136,9 +136,9 @@ func hashBodyByKey(key *string, body []byte) string {
 }
 
 func (m *agent) performRequest(url string) (err error) {
-	defer m.mu.Unlock()
 	m.config.Logger.Info("Sending metrics to server...")
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	body := prepareRequestBody(m.metrics)
 	m.config.Logger.Info("Sending metrics", zap.ByteString("body", body))
 	r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
