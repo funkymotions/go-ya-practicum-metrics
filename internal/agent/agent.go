@@ -67,6 +67,7 @@ type Config struct {
 	Client         *http.Client
 	PollInterval   time.Duration
 	ReportInterval time.Duration
+	RateLimit      int
 	MetricURL      url.URL
 	Logger         *zap.Logger
 	MaxRetries     int
@@ -110,11 +111,58 @@ func (m *agent) Launch() {
 	)
 	stop := make(chan struct{})
 	defer close(stop)
-	go m.collectMetrics(stop)
-	go m.sendMetrics(stop)
+	fmt.Printf("Agent started with RateLimit = %d\n", m.config.RateLimit)
+	if m.config.RateLimit == 0 {
+		go m.collectMetrics(stop)
+		go m.sendMetrics(stop)
+	} else {
+		jobs := make(chan models.Metrics, 32+5)
+		go m.collectMetricsByWorker(stop, jobs)
+		// start sender
+		for i := 0; i < m.config.RateLimit; i++ {
+			go m.processMetricsByWorker(stop, jobs)
+		}
+	}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
+	fmt.Printf("Agent is running. Press Ctrl+C to stop.\n")
 	<-c
+}
+
+func (m *agent) processMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
+	for {
+		select {
+		case <-stopCh:
+			return
+		case job := <-jobs:
+			fmt.Printf("Worker processing metric ID: %s\n", job.ID)
+			m.processMetric(job)
+		}
+	}
+}
+
+func (m *agent) processMetric(metric models.Metrics) error {
+	fmt.Printf("sending HTTP request for metric ID: %s\n", metric.ID)
+	// TODO: make HTTP request to send single metric with JSON body
+	return nil
+}
+
+func (m *agent) collectMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			m.collectRuntimeMetrics()
+			// fill in the jobs channel
+			for _, metric := range m.metrics {
+				jobs <- metric
+			}
+		case <-stopCh:
+			close(jobs)
+			return
+		}
+	}
 }
 
 func (m *agent) sendMetrics(stop chan struct{}) {
@@ -175,54 +223,58 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			var memStats runtime.MemStats
-			runtime.ReadMemStats(&memStats)
-			m.mu.Lock()
-			m.config.Logger.Info("Collecting metrics...")
-			for key, getter := range getters {
-				m.metrics[key] = getGaugeMetricModel(key, memStats, getter)
-			}
-			randVal := float64(rand.Intn(1000))
-			m.metrics["RandomValue"] = models.Metrics{
-				ID:    "RandomValue",
-				MType: models.Gauge,
-				Value: &randVal,
-			}
-			memTotal := float64(m.vm.Total)
-			memFree := float64(m.vm.Free)
-			CPUutilization1 := float64(m.vm.UsedPercent)
-			m.metrics["TotalMemory"] = models.Metrics{
-				ID:    "TotalMemory",
-				MType: models.Gauge,
-				Value: &memTotal,
-			}
-			m.metrics["FreeMemory"] = models.Metrics{
-				ID:    "FreeMemory",
-				MType: models.Gauge,
-				Value: &memFree,
-			}
-			m.metrics["CPUutilization"] = models.Metrics{
-				ID:    "CPUutilization",
-				MType: models.Gauge,
-				Value: &CPUutilization1,
-			}
-			pCount, ok := m.metrics["PollCount"]
-			if ok {
-				*pCount.Delta += 1
-				m.metrics["PollCount"] = pCount
-			} else {
-				var initVal int64 = 1
-				m.metrics["PollCount"] = models.Metrics{
-					ID:    "PollCount",
-					MType: models.Counter,
-					Delta: &initVal,
-				}
-			}
-			m.mu.Unlock()
+			m.collectRuntimeMetrics()
 		case <-stop:
 			return
 		}
 	}
+}
+
+func (m *agent) collectRuntimeMetrics() {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	m.mu.Lock()
+	m.config.Logger.Info("Collecting metrics...")
+	for key, getter := range getters {
+		m.metrics[key] = getGaugeMetricModel(key, memStats, getter)
+	}
+	randVal := float64(rand.Intn(1000))
+	m.metrics["RandomValue"] = models.Metrics{
+		ID:    "RandomValue",
+		MType: models.Gauge,
+		Value: &randVal,
+	}
+	memTotal := float64(m.vm.Total)
+	memFree := float64(m.vm.Free)
+	CPUutilization1 := float64(m.vm.UsedPercent)
+	m.metrics["TotalMemory"] = models.Metrics{
+		ID:    "TotalMemory",
+		MType: models.Gauge,
+		Value: &memTotal,
+	}
+	m.metrics["FreeMemory"] = models.Metrics{
+		ID:    "FreeMemory",
+		MType: models.Gauge,
+		Value: &memFree,
+	}
+	m.metrics["CPUutilization"] = models.Metrics{
+		ID:    "CPUutilization",
+		MType: models.Gauge,
+		Value: &CPUutilization1,
+	}
+	pCount, ok := m.metrics["PollCount"]
+	if ok {
+		*pCount.Delta += 1
+		m.metrics["PollCount"] = pCount
+	} else {
+		var initVal int64 = 1
+		m.metrics["PollCount"] = models.Metrics{
+			ID:    "PollCount",
+			MType: models.Counter,
+			Delta: &initVal,
+		}
+	}
+	m.mu.Unlock()
 }
 
 func getGaugeMetricModel(name string, stats runtime.MemStats, g getter) models.Metrics {
