@@ -18,6 +18,7 @@ import (
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
+	"github.com/shirou/gopsutil/mem"
 	"go.uber.org/zap"
 )
 
@@ -59,6 +60,7 @@ type agent struct {
 	config  *Config
 	metrics map[string]models.Metrics
 	mu      sync.Mutex
+	vm      *mem.VirtualMemoryStat
 }
 
 type Config struct {
@@ -91,9 +93,11 @@ func (r *retriableError) Unwrap() error {
 }
 
 func NewAgent(cfg *Config) *agent {
+	m, _ := mem.VirtualMemory()
 	return &agent{
 		config:  cfg,
 		metrics: make(map[string]models.Metrics),
+		vm:      m,
 	}
 }
 
@@ -105,12 +109,12 @@ func (m *agent) Launch() {
 		zap.Duration("pollInterval", m.config.PollInterval),
 	)
 	stop := make(chan struct{})
+	defer close(stop)
 	go m.collectMetrics(stop)
 	go m.sendMetrics(stop)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	<-c
-	close(stop)
 }
 
 func (m *agent) sendMetrics(stop chan struct{}) {
@@ -183,6 +187,24 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 				ID:    "RandomValue",
 				MType: models.Gauge,
 				Value: &randVal,
+			}
+			memTotal := float64(m.vm.Total)
+			memFree := float64(m.vm.Free)
+			CPUutilization1 := float64(m.vm.UsedPercent)
+			m.metrics["TotalMemory"] = models.Metrics{
+				ID:    "TotalMemory",
+				MType: models.Gauge,
+				Value: &memTotal,
+			}
+			m.metrics["FreeMemory"] = models.Metrics{
+				ID:    "FreeMemory",
+				MType: models.Gauge,
+				Value: &memFree,
+			}
+			m.metrics["CPUutilization"] = models.Metrics{
+				ID:    "CPUutilization",
+				MType: models.Gauge,
+				Value: &CPUutilization1,
 			}
 			pCount, ok := m.metrics["PollCount"]
 			if ok {
