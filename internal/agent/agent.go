@@ -18,6 +18,7 @@ import (
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
+	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
 	"go.uber.org/zap"
 )
@@ -60,7 +61,6 @@ type agent struct {
 	config  *Config
 	metrics map[string]models.Metrics
 	mu      sync.Mutex
-	vm      *mem.VirtualMemoryStat
 }
 
 type Config struct {
@@ -94,11 +94,9 @@ func (r *retriableError) Unwrap() error {
 }
 
 func NewAgent(cfg *Config) *agent {
-	m, _ := mem.VirtualMemory()
 	return &agent{
 		config:  cfg,
 		metrics: make(map[string]models.Metrics),
-		vm:      m,
 	}
 }
 
@@ -116,7 +114,7 @@ func (m *agent) Launch() {
 		go m.collectMetrics(stop)
 		go m.sendMetrics(stop)
 	} else {
-		jobs := make(chan models.Metrics, 32+5)
+		jobs := make(chan models.Metrics, runtime.NumCPU()+35)
 		go m.collectMetricsByWorker(stop, jobs)
 		// start sender
 		for i := 0; i < m.config.RateLimit; i++ {
@@ -135,7 +133,6 @@ func (m *agent) processMetricsByWorker(stopCh chan struct{}, jobs chan models.Me
 		case <-stopCh:
 			return
 		case job := <-jobs:
-			fmt.Printf("Worker processing metric ID: %s\n", job.ID)
 			m.processMetric(job)
 		}
 	}
@@ -143,12 +140,24 @@ func (m *agent) processMetricsByWorker(stopCh chan struct{}, jobs chan models.Me
 
 func (m *agent) processMetric(metric models.Metrics) error {
 	fmt.Printf("sending HTTP request for metric ID: %s\n", metric.ID)
-	// TODO: make HTTP request to send single metric with JSON body
+	body, err := json.Marshal(metric)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, m.config.MetricURL.String(), bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	resp, err := m.config.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	return nil
 }
 
 func (m *agent) collectMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := time.NewTicker(m.config.PollInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -244,9 +253,18 @@ func (m *agent) collectRuntimeMetrics() {
 		MType: models.Gauge,
 		Value: &randVal,
 	}
-	memTotal := float64(m.vm.Total)
-	memFree := float64(m.vm.Free)
-	CPUutilization1 := float64(m.vm.UsedPercent)
+	vm, _ := mem.VirtualMemory()
+	memTotal := float64(vm.Total)
+	memFree := float64(vm.Free)
+	percentages, _ := cpu.Percent(0, true)
+	for i, percent := range percentages {
+		CPUid := fmt.Sprintf("CPUutilization%d", i+1)
+		m.metrics[CPUid] = models.Metrics{
+			ID:    CPUid,
+			MType: models.Gauge,
+			Value: &percent,
+		}
+	}
 	m.metrics["TotalMemory"] = models.Metrics{
 		ID:    "TotalMemory",
 		MType: models.Gauge,
@@ -256,11 +274,6 @@ func (m *agent) collectRuntimeMetrics() {
 		ID:    "FreeMemory",
 		MType: models.Gauge,
 		Value: &memFree,
-	}
-	m.metrics["CPUutilization"] = models.Metrics{
-		ID:    "CPUutilization",
-		MType: models.Gauge,
-		Value: &CPUutilization1,
 	}
 	pCount, ok := m.metrics["PollCount"]
 	if ok {
