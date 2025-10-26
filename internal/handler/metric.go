@@ -11,11 +11,11 @@ import (
 type metricService interface {
 	SetCounter(name string, value string) error
 	SetGauge(name string, value string) error
-	SetMetricByModel(m *models.Metrics) error
+	SetMetricByModel([]byte) (*models.Metrics, error)
 	GetMetricByModel(m *models.Metrics) (*models.Metrics, error)
-	GetMetric(metricType, name string) (*models.Metrics, bool)
+	GetMetric(metricType, name string) (*models.Metrics, error)
 	GetAllMetricsForHTML() string
-	SetMetricBulk(m *[]models.Metrics) error
+	SetMetricBulk([]byte, []byte) error
 	Ping() error
 }
 

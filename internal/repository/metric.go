@@ -23,36 +23,24 @@ import (
 	"go.uber.org/zap"
 )
 
-type NonRetriablePgError struct {
+type retriablePgError struct {
 	err error
 }
 
-func NewNonRetriablePgError(err error) *NonRetriablePgError {
-	return &NonRetriablePgError{err: err}
+func newRetriablePgError(err error) *retriablePgError {
+	return &retriablePgError{err: err}
 }
 
-func (e *NonRetriablePgError) Unwrap() error {
+func (e *retriablePgError) Unwrap() error {
 	return e.err
 }
 
-func (e *NonRetriablePgError) Error() string {
+func (e *retriablePgError) Error() string {
 	return e.err.Error()
 }
 
-type RetriablePgError struct {
-	err error
-}
-
-func NewRetriablePgError(err error) *RetriablePgError {
-	return &RetriablePgError{err: err}
-}
-
-func (e *RetriablePgError) Unwrap() error {
-	return e.err
-}
-
-func (e *RetriablePgError) Error() string {
-	return e.err.Error()
+func (e *retriablePgError) IsRetriable() bool {
+	return true
 }
 
 type metricRepository struct {
@@ -124,7 +112,7 @@ func (r *metricRepository) SetGaugeIntrospect(name string, value float64) error 
 	}()
 	if r.driver == nil {
 		r.logger.Warn("DB is not initialized. Continuing...")
-		err = NewNonRetriablePgError(errors.New("DB is not initialized"))
+		r.SetGauge(name, value)
 	} else {
 		err = r.upsertMetric(
 			nil,
@@ -139,7 +127,7 @@ func (r *metricRepository) SetGaugeIntrospect(name string, value float64) error 
 		if err != nil && errors.As(err, &pqError) {
 			pgErr := err.(*pq.Error)
 			if pgerrcode.IsConnectionException(string(pgErr.Code)) {
-				err = NewRetriablePgError(err)
+				err = newRetriablePgError(err)
 			}
 		}
 	}
@@ -156,7 +144,7 @@ func (r *metricRepository) SetCounterIntrospect(name string, delta int64) error 
 	}()
 	if r.driver == nil {
 		r.logger.Warn("DB is not initialized. Continuing...")
-		err = NewNonRetriablePgError(errors.New("DB is not initialized"))
+		r.SetCounter(name, delta)
 	} else {
 		err = r.upsertMetric(
 			nil,
@@ -171,7 +159,7 @@ func (r *metricRepository) SetCounterIntrospect(name string, delta int64) error 
 		if errors.Is(err, pqError) {
 			pgErr := err.(*pq.Error)
 			if pgerrcode.IsConnectionException(string(pgErr.Code)) {
-				err = NewRetriablePgError(err)
+				err = newRetriablePgError(err)
 			}
 		}
 	}

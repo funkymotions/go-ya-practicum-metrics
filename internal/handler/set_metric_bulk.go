@@ -1,10 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
-	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 )
 
 func (h *metricHandler) SetMetricBulk(w http.ResponseWriter, r *http.Request) {
@@ -13,12 +14,19 @@ func (h *metricHandler) SetMetricBulk(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	var metrics []models.Metrics
-	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := h.service.SetMetricBulk(&metrics); err != nil {
+	var metricErr *service.InvalidMetricError
+	hash := r.Header.Get("hashsha256")
+	err = h.service.SetMetricBulk(body, []byte(hash))
+	if errors.As(err, &metricErr) {
+		w.WriteHeader(metricErr.StatusCode)
+		return
+	}
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

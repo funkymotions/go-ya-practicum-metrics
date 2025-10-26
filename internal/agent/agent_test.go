@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,10 +66,11 @@ func TestNewAgent(t *testing.T) {
 }
 
 func Test_agent_sendMetrics(t *testing.T) {
-	var isServerWasCalled = false
+	var isServerWasCalled atomic.Value
+	isServerWasCalled.Store(false)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		isServerWasCalled = true
+		isServerWasCalled.Store(true)
 	}))
 	testServerURL, _ := url.Parse(ts.URL)
 	defer ts.Close()
@@ -129,7 +130,7 @@ func Test_agent_sendMetrics(t *testing.T) {
 			}
 			go m.sendMetrics(tt.args.stop)
 			time.Sleep(150 * time.Millisecond)
-			require.Equal(t, tt.want, isServerWasCalled)
+			require.Equal(t, tt.want, isServerWasCalled.Load().(bool))
 		})
 	}
 }
@@ -139,7 +140,6 @@ func Test_agent_collectMetrics(t *testing.T) {
 		URL     string
 		config  *Config
 		metrics map[string]models.Metrics
-		mu      sync.Mutex
 	}
 	type args struct {
 		stop chan struct{}
@@ -159,7 +159,6 @@ func Test_agent_collectMetrics(t *testing.T) {
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 100 * time.Second,
 				},
-				mu: sync.Mutex{},
 			},
 		},
 	}
@@ -169,11 +168,12 @@ func Test_agent_collectMetrics(t *testing.T) {
 			m := &agent{
 				config:  tt.fields.config,
 				metrics: tt.fields.metrics,
-				mu:      sync.Mutex{},
 			}
 			go m.collectMetrics(tt.args.stop)
 			time.Sleep(100 * time.Millisecond)
+			m.mu.Lock()
 			result := len(m.metrics)
+			m.mu.Unlock()
 			require.NotEqual(t, result, 0, "Expected metrics to be collected")
 		})
 	}
@@ -198,7 +198,7 @@ func (s *performRequestTestSuite) SetupTest() {
 			},
 			PollInterval:   50 * time.Millisecond,
 			ReportInterval: 100 * time.Millisecond,
-			MaxRetries:     &retries,
+			MaxRetries:     retries,
 		},
 		metrics: map[string]models.Metrics{},
 	}

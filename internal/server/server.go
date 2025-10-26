@@ -9,6 +9,7 @@ import (
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/repository"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
@@ -47,11 +48,10 @@ func NewServer(v *appenv.Variables) *Server {
 	dbConf := db.NewDBConfig(*v.DatabaseDSN)
 	d, _ := driver.NewSQLDriver(dbConf)
 	// logger
-	// logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
-	logger := zap.NewNop()
-	// if err != nil {
-	// 	log.Fatalf("failed to initialize logger: %v", err)
-	// }
+	logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
+	if err != nil {
+		log.Fatalf("failed to initialize logger: %v", err)
+	}
 	// channels
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
@@ -65,7 +65,7 @@ func NewServer(v *appenv.Variables) *Server {
 		doneCh,
 	)
 	// services
-	metricService := service.NewMetricService(metricRepo)
+	metricService := service.NewMetricService(metricRepo, []byte(*v.Key))
 	// handlers
 	metricHandler := handler.NewMetricHandler(metricService)
 	// routing

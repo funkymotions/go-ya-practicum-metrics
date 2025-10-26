@@ -2,8 +2,10 @@ package agent
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -15,6 +17,9 @@ import (
 	"time"
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	"go.uber.org/zap"
 )
 
@@ -53,19 +58,23 @@ var getters = map[string]getter{
 }
 
 type agent struct {
-	config        *Config
-	metrics       map[string]models.Metrics
-	mu            sync.Mutex
-	cachedRequest *http.Request
+	config  *Config
+	metrics map[string]models.Metrics
+	mu      sync.Mutex
 }
 
 type Config struct {
 	Client         *http.Client
 	PollInterval   time.Duration
 	ReportInterval time.Duration
+	RateLimit      int
 	MetricURL      url.URL
 	Logger         *zap.Logger
-	MaxRetries     *int
+	MaxRetries     int
+	Hashing        struct {
+		Key        *string
+		HeaderName string
+	}
 }
 
 type retriableError struct {
@@ -99,12 +108,70 @@ func (m *agent) Launch() {
 		zap.Duration("pollInterval", m.config.PollInterval),
 	)
 	stop := make(chan struct{})
-	go m.collectMetrics(stop)
-	go m.sendMetrics(stop)
+	defer close(stop)
+	fmt.Printf("Agent started with RateLimit = %d\n", m.config.RateLimit)
+	if m.config.RateLimit == 0 {
+		go m.collectMetrics(stop)
+		go m.sendMetrics(stop)
+	} else {
+		jobs := make(chan models.Metrics, runtime.NumCPU()+35)
+		go m.collectMetricsByWorker(stop, jobs)
+		// start sender
+		for i := 0; i < m.config.RateLimit; i++ {
+			go m.processMetricsByWorker(stop, jobs)
+		}
+	}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
+	fmt.Printf("Agent is running. Press Ctrl+C to stop.\n")
 	<-c
-	close(stop)
+}
+
+func (m *agent) processMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
+	for {
+		select {
+		case <-stopCh:
+			return
+		case job := <-jobs:
+			m.processMetric(job)
+		}
+	}
+}
+
+func (m *agent) processMetric(metric models.Metrics) error {
+	fmt.Printf("sending HTTP request for metric ID: %s\n", metric.ID)
+	body, err := json.Marshal(metric)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, m.config.MetricURL.String(), bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	resp, err := m.config.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (m *agent) collectMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
+	ticker := time.NewTicker(m.config.PollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			m.collectRuntimeMetrics()
+			// fill in the jobs channel
+			for _, metric := range m.metrics {
+				jobs <- metric
+			}
+		case <-stopCh:
+			close(jobs)
+			return
+		}
+	}
 }
 
 func (m *agent) sendMetrics(stop chan struct{}) {
@@ -114,7 +181,7 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			withRetry(func() error {
+			utils.WithRetry(func() error {
 				return m.performRequest(url)
 			}, 0, m.config.MaxRetries)
 		case <-stop:
@@ -123,10 +190,16 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 	}
 }
 
+func hashBodyByKey(key *string, body []byte) string {
+	hmac := hmac.New(sha256.New, []byte(*key))
+	hmac.Write(body)
+	return hex.EncodeToString(hmac.Sum(nil))
+}
+
 func (m *agent) performRequest(url string) (err error) {
-	defer m.mu.Unlock()
 	m.config.Logger.Info("Sending metrics to server...")
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	body := prepareRequestBody(m.metrics)
 	m.config.Logger.Info("Sending metrics", zap.ByteString("body", body))
 	r, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
@@ -136,6 +209,10 @@ func (m *agent) performRequest(url string) (err error) {
 	}
 	r.Header.Set("Content-Type", contentType)
 	r.Header.Set("Accept-Encoding", "gzip")
+	if m.config.Hashing.Key != nil && *m.config.Hashing.Key != "" {
+		hValue := hashBodyByKey(m.config.Hashing.Key, body)
+		r.Header.Set(m.config.Hashing.HeaderName, hValue)
+	}
 	resp, err := m.config.Client.Do(r)
 	if err != nil {
 		m.config.Logger.Error("Error sending metrics", zap.Error(err))
@@ -155,36 +232,62 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			var memStats runtime.MemStats
-			runtime.ReadMemStats(&memStats)
-			m.mu.Lock()
-			m.config.Logger.Info("Collecting metrics...")
-			for key, getter := range getters {
-				m.metrics[key] = getGaugeMetricModel(key, memStats, getter)
-			}
-			randVal := float64(rand.Intn(1000))
-			m.metrics["RandomValue"] = models.Metrics{
-				ID:    "RandomValue",
-				MType: models.Gauge,
-				Value: &randVal,
-			}
-			pCount, ok := m.metrics["PollCount"]
-			if ok {
-				*pCount.Delta += 1
-				m.metrics["PollCount"] = pCount
-			} else {
-				var initVal int64 = 1
-				m.metrics["PollCount"] = models.Metrics{
-					ID:    "PollCount",
-					MType: models.Counter,
-					Delta: &initVal,
-				}
-			}
-			m.mu.Unlock()
+			m.collectRuntimeMetrics()
 		case <-stop:
 			return
 		}
 	}
+}
+
+func (m *agent) collectRuntimeMetrics() {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	m.mu.Lock()
+	m.config.Logger.Info("Collecting metrics...")
+	for key, getter := range getters {
+		m.metrics[key] = getGaugeMetricModel(key, memStats, getter)
+	}
+	randVal := float64(rand.Intn(1000))
+	m.metrics["RandomValue"] = models.Metrics{
+		ID:    "RandomValue",
+		MType: models.Gauge,
+		Value: &randVal,
+	}
+	vm, _ := mem.VirtualMemory()
+	memTotal := float64(vm.Total)
+	memFree := float64(vm.Free)
+	percentages, _ := cpu.Percent(0, true)
+	for i, percent := range percentages {
+		CPUid := fmt.Sprintf("CPUutilization%d", i+1)
+		m.metrics[CPUid] = models.Metrics{
+			ID:    CPUid,
+			MType: models.Gauge,
+			Value: &percent,
+		}
+	}
+	m.metrics["TotalMemory"] = models.Metrics{
+		ID:    "TotalMemory",
+		MType: models.Gauge,
+		Value: &memTotal,
+	}
+	m.metrics["FreeMemory"] = models.Metrics{
+		ID:    "FreeMemory",
+		MType: models.Gauge,
+		Value: &memFree,
+	}
+	pCount, ok := m.metrics["PollCount"]
+	if ok {
+		*pCount.Delta += 1
+		m.metrics["PollCount"] = pCount
+	} else {
+		var initVal int64 = 1
+		m.metrics["PollCount"] = models.Metrics{
+			ID:    "PollCount",
+			MType: models.Counter,
+			Delta: &initVal,
+		}
+	}
+	m.mu.Unlock()
 }
 
 func getGaugeMetricModel(name string, stats runtime.MemStats, g getter) models.Metrics {
@@ -203,25 +306,4 @@ func prepareRequestBody(m map[string]models.Metrics) []byte {
 	}
 	jsonData, _ := json.Marshal(metrics)
 	return jsonData
-}
-
-func withRetry(fn func() error, attempts int, maxAttempts *int) error {
-	// no retry
-	if maxAttempts == nil {
-		return fn()
-	}
-	// stop retrying due to no attempts left
-	if attempts >= *maxAttempts {
-		return fmt.Errorf("max retry attempts reached")
-	}
-	secondsToSleep := time.Duration(2*(attempts)+1) * time.Second
-	var retriableErr *retriableError
-	if err := fn(); err != nil {
-		if errors.As(err, &retriableErr) {
-			time.Sleep(secondsToSleep)
-			return withRetry(fn, attempts+1, maxAttempts)
-		}
-		return err
-	}
-	return nil
 }

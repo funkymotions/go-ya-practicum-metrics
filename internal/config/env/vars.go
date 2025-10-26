@@ -15,6 +15,8 @@ type Variables struct {
 	FileStoragePath *string `env:"FILE_STORAGE_PATH"`
 	Restore         *bool   `env:"RESTORE"`
 	DatabaseDSN     *string `env:"DATABASE_DSN"`
+	Key             *string `env:"KEY"`
+	RateLimit       *int    `env:"RATE_LIMIT"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -22,12 +24,16 @@ func ParseAgentOptions() *Variables {
 	var endpointFlag = &Endpoint{Hostname: "localhost", Port: 8080}
 	var reportInterval = new(uint)
 	var pollInterval = new(uint)
+	var key = new(string)
+	var rateLimit = new(int)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
 	flag.UintVar(reportInterval, "r", 10, "set report interval (seconds)")
 	flag.UintVar(pollInterval, "p", 2, "set poll interval (seconds)")
+	flag.StringVar(key, "k", "", "set key used for hashing")
+	flag.IntVar(rateLimit, "l", 0, "set rate limit (requests per second), 0 means no limit")
 	flag.Parse()
 	return &Variables{
 		Endpoint: func() *string {
@@ -49,6 +55,18 @@ func ParseAgentOptions() *Variables {
 			}
 			return pollInterval
 		}(),
+		Key: func() *string {
+			if envVars.Key != nil {
+				return envVars.Key
+			}
+			return key
+		}(),
+		RateLimit: func() *int {
+			if envVars.RateLimit != nil {
+				return envVars.RateLimit
+			}
+			return rateLimit
+		}(),
 	}
 }
 
@@ -59,6 +77,7 @@ func ParseServerOptions() *Variables {
 	var fileStoragePath = new(string)
 	var restore = new(bool)
 	var dsn = new(string)
+	var key = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -67,6 +86,7 @@ func ParseServerOptions() *Variables {
 	flag.BoolVar(restore, "r", false, "set restore")
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
 	flag.StringVar(dsn, "d", "", "set database dsn")
+	flag.StringVar(key, "k", "", "set key used for hashing")
 	flag.Parse()
 	return &Variables{
 		Endpoint: func() *string {
@@ -99,6 +119,12 @@ func ParseServerOptions() *Variables {
 				return envVars.DatabaseDSN
 			}
 			return dsn
+		}(),
+		Key: func() *string {
+			if envVars.Key != nil {
+				return envVars.Key
+			}
+			return key
 		}(),
 	}
 }
