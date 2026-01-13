@@ -19,13 +19,19 @@ type metricService interface {
 	Ping() error
 }
 
-type metricHandler struct {
-	service metricService
+type auditMiddleware interface {
+	Audit(next http.Handler) http.Handler
 }
 
-func NewMetricHandler(s metricService) *metricHandler {
+type metricHandler struct {
+	service         metricService
+	auditMiddleware auditMiddleware
+}
+
+func NewMetricHandler(s metricService, am auditMiddleware) *metricHandler {
 	return &metricHandler{
-		service: s,
+		service:         s,
+		auditMiddleware: am,
 	}
 }
 
@@ -42,6 +48,8 @@ func (h *metricHandler) Register(engine *chi.Mux) {
 	engine.
 		With(middleware.CompressHandler).
 		Post("/value/", http.HandlerFunc(h.GetMetricByJSON))
-	engine.With(middleware.CompressHandler).
+	engine.
+		With(middleware.CompressHandler).
+		With(h.auditMiddleware.Audit).
 		Post("/updates/", http.HandlerFunc(h.SetMetricBulk))
 }

@@ -61,7 +61,8 @@ func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte) error {
 
 func TestNewMetricHandler(t *testing.T) {
 	type args struct {
-		s metricService
+		s               metricService
+		auditMiddleware auditMiddleware
 	}
 	tests := []struct {
 		name string
@@ -71,7 +72,8 @@ func TestNewMetricHandler(t *testing.T) {
 		{
 			name: "should create a new metric handler",
 			args: args{
-				s: &metricServiceStub{},
+				s:               &metricServiceStub{},
+				auditMiddleware: nil,
 			},
 			want: &metricHandler{
 				service: &metricServiceStub{},
@@ -80,7 +82,7 @@ func TestNewMetricHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := NewMetricHandler(tt.args.s)
+			actual := NewMetricHandler(tt.args.s, tt.args.auditMiddleware)
 			assert.True(t, reflect.DeepEqual(actual, tt.want))
 		})
 	}

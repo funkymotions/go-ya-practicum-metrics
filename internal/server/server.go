@@ -22,6 +22,7 @@ type Server struct {
 	logger            *zap.Logger
 	stopCh            chan struct{}
 	doneCh            chan struct{}
+	auditDoneCh       chan struct{}
 	shouldWaitForDone bool
 }
 
@@ -36,8 +37,9 @@ func (s *Server) Shutdown() {
 	close(s.stopCh)
 	if s.shouldWaitForDone {
 		<-s.doneCh
-		s.logger.Info("All goroutines have exited")
 	}
+	<-s.auditDoneCh
+	s.logger.Info("All goroutines have exited")
 }
 
 func NewServer(v *appenv.Variables) *Server {
@@ -55,6 +57,7 @@ func NewServer(v *appenv.Variables) *Server {
 	// channels
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
+	auditDoneCh := make(chan struct{})
 	// repositories
 	metricRepo := repository.NewMetricRepository(
 		*v.FileStoragePath,
@@ -64,10 +67,14 @@ func NewServer(v *appenv.Variables) *Server {
 		stopCh,
 		doneCh,
 	)
+
 	// services
 	metricService := service.NewMetricService(metricRepo, []byte(*v.Key))
+	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
 	// handlers
-	metricHandler := handler.NewMetricHandler(metricService)
+
+	auditMiddleware := middleware.NewAuditMiddleware(logger, auditService)
+	metricHandler := handler.NewMetricHandler(metricService, auditMiddleware)
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
@@ -82,6 +89,7 @@ func NewServer(v *appenv.Variables) *Server {
 		logger:            logger,
 		stopCh:            stopCh,
 		doneCh:            doneCh,
+		auditDoneCh:       auditDoneCh,
 		shouldWaitForDone: *v.StoreInterval != 0,
 	}
 }

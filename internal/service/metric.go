@@ -189,6 +189,7 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte) error {
 	}
 	var metrics []models.Metrics
 	if err := json.NewDecoder(bytes.NewReader(input)).Decode(&metrics); err != nil {
+		fmt.Printf("Error decoding bulk metrics: %v\n", err)
 		return &InvalidMetricError{
 			Message:    err.Error(),
 			StatusCode: http.StatusBadRequest,

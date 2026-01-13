@@ -17,6 +17,8 @@ type Variables struct {
 	DatabaseDSN     *string `env:"DATABASE_DSN"`
 	Key             *string `env:"KEY"`
 	RateLimit       *int    `env:"RATE_LIMIT"`
+	AuditFile       *string `env:"AUDIT_FILE"`
+	AuditURL        *string `env:"AUDIT_URL"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -78,6 +80,8 @@ func ParseServerOptions() *Variables {
 	var restore = new(bool)
 	var dsn = new(string)
 	var key = new(string)
+	var auditFile = new(string)
+	var auditURL = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -87,6 +91,8 @@ func ParseServerOptions() *Variables {
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
 	flag.StringVar(dsn, "d", "", "set database dsn")
 	flag.StringVar(key, "k", "", "set key used for hashing")
+	flag.StringVar(auditFile, "audit-file", "", "set audit file path")
+	flag.StringVar(auditURL, "audit-url", "", "set audit service URL")
 	flag.Parse()
 	return &Variables{
 		Endpoint: func() *string {
@@ -125,6 +131,18 @@ func ParseServerOptions() *Variables {
 				return envVars.Key
 			}
 			return key
+		}(),
+		AuditFile: func() *string {
+			if envVars.AuditFile != nil {
+				return envVars.AuditFile
+			}
+			return auditFile
+		}(),
+		AuditURL: func() *string {
+			if envVars.AuditURL != nil {
+				return envVars.AuditURL
+			}
+			return auditURL
 		}(),
 	}
 }
