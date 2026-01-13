@@ -14,8 +14,8 @@ import (
 type AuditType uint
 
 const (
-	AUDIT_FILE_TYPE = iota
-	AUDIT_SERVICE_TYPE
+	AuditFileType = iota
+	AuditServiceType
 )
 
 type AuditObserver interface {
@@ -74,16 +74,16 @@ func NewAuditService(
 	service.observers = make(map[string]AuditObserver)
 	if filePath != "" {
 		sub := Subscriber{
-			ID:   strconv.FormatInt(int64(AUDIT_FILE_TYPE), 10),
-			Type: AUDIT_FILE_TYPE,
+			ID:   strconv.FormatInt(int64(AuditFileType), 10),
+			Type: AuditFileType,
 		}
 		service.observers[sub.ID] = &sub
 		service.filePath = filePath
 	}
 	if remoteURL != "" {
 		sub := Subscriber{
-			ID:   strconv.FormatInt(int64(AUDIT_SERVICE_TYPE), 10),
-			Type: AUDIT_SERVICE_TYPE,
+			ID:   strconv.FormatInt(int64(AuditServiceType), 10),
+			Type: AuditServiceType,
 		}
 		service.observers[sub.ID] = &sub
 		service.remoteURL = remoteURL
@@ -137,10 +137,10 @@ func (s *auditService) dispatch(rawMessage any, ipAddress string) {
 			Metrics:   metricNames,
 			IPAddress: ipAddress,
 		}
-		if observer.GetType() == AUDIT_FILE_TYPE {
+		if observer.GetType() == AuditFileType {
 			observer.emit(m, s.writeEvent)
 		}
-		if observer.GetType() == AUDIT_SERVICE_TYPE {
+		if observer.GetType() == AuditServiceType {
 			observer.emit(m, s.sendEvent)
 		}
 	}
