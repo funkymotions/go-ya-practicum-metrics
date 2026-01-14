@@ -72,8 +72,7 @@ func TestNewMetricHandler(t *testing.T) {
 		{
 			name: "should create a new metric handler",
 			args: args{
-				s:               &metricServiceStub{},
-				auditMiddleware: nil,
+				s: &metricServiceStub{},
 			},
 			want: &metricHandler{
 				service: &metricServiceStub{},
@@ -82,7 +81,7 @@ func TestNewMetricHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := NewMetricHandler(tt.args.s, tt.args.auditMiddleware)
+			actual := NewMetricHandler(tt.args.s)
 			assert.True(t, reflect.DeepEqual(actual, tt.want))
 		})
 	}

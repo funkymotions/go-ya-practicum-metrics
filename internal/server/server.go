@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
@@ -69,15 +71,17 @@ func NewServer(v *appenv.Variables) *Server {
 	)
 
 	// services
-	metricService := service.NewMetricService(metricRepo, []byte(*v.Key))
 	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
+	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService)
 	// handlers
 
-	auditMiddleware := middleware.NewAuditMiddleware(logger, auditService)
-	metricHandler := handler.NewMetricHandler(metricService, auditMiddleware)
+	// auditMiddleware := middleware.NewAuditMiddleware(logger, auditService)
+	metricHandler := handler.NewMetricHandler(metricService)
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
+
+	r.Mount("/debug/pprof/", http.DefaultServeMux)
 	// register metrics entries
 	metricHandler.Register(r)
 	httpSrv := &http.Server{

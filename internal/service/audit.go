@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 )
 
 type AuditType uint
@@ -129,7 +131,6 @@ func (s *auditService) run() {
 
 func (s *auditService) dispatch(rawMessage any, ipAddress string) {
 	defer s.wg.Done()
-	time.Sleep(time.Second * 20)
 	for _, observer := range s.observers {
 		metricNames := extractMetricNames(rawMessage)
 		m := AuditMessage{
@@ -170,17 +171,11 @@ func (s *auditService) sendEvent(m AuditMessage) {
 func extractMetricNames(metrics any) []string {
 	metricNames := make([]string, 0)
 	switch v := metrics.(type) {
-	case map[string]interface{}:
-		for key := range v {
-			metricNames = append(metricNames, key)
-		}
-	case []interface{}:
+	case models.Metrics:
+		metricNames = append(metricNames, v.ID)
+	case []models.Metrics:
 		for _, item := range v {
-			if metricMap, ok := item.(map[string]interface{}); ok {
-				if id, exists := metricMap["id"].(string); exists {
-					metricNames = append(metricNames, id)
-				}
-			}
+			metricNames = append(metricNames, item.ID)
 		}
 	}
 	return metricNames

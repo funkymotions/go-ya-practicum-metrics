@@ -24,6 +24,10 @@ func (e *InvalidMetricError) Error() string {
 	return fmt.Sprintf("code %d: %s", e.StatusCode, e.Message)
 }
 
+type auditPublisher interface {
+	Notify(metrics interface{}, ipAddress string)
+}
+
 type metricRepoInterface interface {
 	SetGauge(name string, parameter float64)
 	SetCounter(name string, parameter int64)
@@ -39,13 +43,15 @@ type metricService struct {
 	repo       metricRepoInterface
 	re         *regexp.Regexp
 	hashSecret []byte
+	audit      auditPublisher
 }
 
-func NewMetricService(repo metricRepoInterface, hashSecret []byte) *metricService {
+func NewMetricService(repo metricRepoInterface, hashSecret []byte, audit auditPublisher) *metricService {
 	return &metricService{
 		repo:       repo,
 		re:         regexp.MustCompile(`^\w+$`),
 		hashSecret: hashSecret,
+		audit:      audit,
 	}
 }
 
@@ -189,13 +195,17 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte) error {
 	}
 	var metrics []models.Metrics
 	if err := json.NewDecoder(bytes.NewReader(input)).Decode(&metrics); err != nil {
-		fmt.Printf("Error decoding bulk metrics: %v\n", err)
 		return &InvalidMetricError{
 			Message:    err.Error(),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
-	return s.repo.SetMetricBulk(&metrics)
+	err := s.repo.SetMetricBulk(&metrics)
+	if err == nil {
+		s.audit.Notify(metrics, "127.0.0.1")
+	}
+
+	return err
 }
 
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {

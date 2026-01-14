@@ -28,10 +28,9 @@ type metricHandler struct {
 	auditMiddleware auditMiddleware
 }
 
-func NewMetricHandler(s metricService, am auditMiddleware) *metricHandler {
+func NewMetricHandler(s metricService) *metricHandler {
 	return &metricHandler{
-		service:         s,
-		auditMiddleware: am,
+		service: s,
 	}
 }
 
@@ -50,6 +49,6 @@ func (h *metricHandler) Register(engine *chi.Mux) {
 		Post("/value/", http.HandlerFunc(h.GetMetricByJSON))
 	engine.
 		With(middleware.CompressHandler).
-		With(h.auditMiddleware.Audit).
+		// With(h.auditMiddleware.Audit).
 		Post("/updates/", http.HandlerFunc(h.SetMetricBulk))
 }
