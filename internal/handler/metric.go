@@ -34,6 +34,9 @@ func NewMetricHandler(s metricService) *metricHandler {
 	}
 }
 
+// Register configures the HTTP routes for working with metrics on the
+// provided chi.Mux router, including health checks, HTML rendering,
+// plain-text endpoints, and JSON-based update/value APIs.
 func (h *metricHandler) Register(engine *chi.Mux) {
 	engine.Get("/ping", h.Ping)
 	engine.
