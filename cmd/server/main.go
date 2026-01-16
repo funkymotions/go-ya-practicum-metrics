@@ -14,14 +14,25 @@ func main() {
 	options := env.ParseServerOptions()
 	s := server.NewServer(options)
 	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	// run server in a separate goroutine to controll graceful shutdown
+	// run server in a separate goroutine to control graceful shutdown
 	go func() {
 		if err := s.Run(); err != nil {
 			log.Printf("Server launch error: %v\n", err)
-			os.Exit(1)
+			// report the error to the main goroutine instead of exiting here
+			errChan <- err
 		}
 	}()
-	<-sigChan
+
+	select {
+	case <-sigChan:
+		// received OS signal, proceed to graceful shutdown
+		log.Printf("Received termination signal, shutting down...\n")
+	case <-errChan:
+		// server reported an error, shut down gracefully
+		log.Printf("Server error received, shutting down...\n")
+	}
+
 	s.Shutdown()
 }
