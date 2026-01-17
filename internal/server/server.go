@@ -73,15 +73,15 @@ func NewServer(v *appenv.Variables) *Server {
 	// services
 	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
 	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService)
-	// handlers
 
-	// auditMiddleware := middleware.NewAuditMiddleware(logger, auditService)
+	// handlers
 	metricHandler := handler.NewMetricHandler(metricService)
+
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
-
 	r.Mount("/debug/pprof/", http.DefaultServeMux)
+
 	// register metrics entries
 	metricHandler.Register(r)
 	httpSrv := &http.Server{
