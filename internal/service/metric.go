@@ -184,7 +184,7 @@ func (s *metricService) Ping() error {
 	return s.repo.Ping()
 }
 
-func (s *metricService) SetMetricBulk(input []byte, signature []byte) error {
+func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP string) error {
 	if len(s.hashSecret) > 0 {
 		if ok := isHashValid(signature, input, s.hashSecret); !ok {
 			return &InvalidMetricError{
@@ -202,7 +202,7 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte) error {
 	}
 	err := s.repo.SetMetricBulk(&metrics)
 	if err == nil {
-		s.audit.Notify(metrics, "127.0.0.1")
+		s.audit.Notify(metrics, remoteIP)
 	}
 
 	return err

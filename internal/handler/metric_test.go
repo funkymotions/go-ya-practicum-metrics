@@ -54,15 +54,14 @@ func (m *metricServiceStub) Ping() error {
 	return args.Error(0)
 }
 
-func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte) error {
-	args := m.Called(body, signature)
+func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte, remoteIP string) error {
+	args := m.Called(body, signature, remoteIP)
 	return args.Error(0)
 }
 
 func TestNewMetricHandler(t *testing.T) {
 	type args struct {
-		s               metricService
-		auditMiddleware auditMiddleware
+		s metricService
 	}
 	tests := []struct {
 		name string

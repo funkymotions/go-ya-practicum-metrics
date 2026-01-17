@@ -15,17 +15,12 @@ type metricService interface {
 	GetMetricByModel(m *models.Metrics) (*models.Metrics, error)
 	GetMetric(metricType, name string) (*models.Metrics, error)
 	GetAllMetricsForHTML() string
-	SetMetricBulk([]byte, []byte) error
+	SetMetricBulk([]byte, []byte, string) error
 	Ping() error
 }
 
-type auditMiddleware interface {
-	Audit(next http.Handler) http.Handler
-}
-
 type metricHandler struct {
-	service         metricService
-	auditMiddleware auditMiddleware
+	service metricService
 }
 
 func NewMetricHandler(s metricService) *metricHandler {
@@ -52,6 +47,5 @@ func (h *metricHandler) Register(engine *chi.Mux) {
 		Post("/value/", http.HandlerFunc(h.GetMetricByJSON))
 	engine.
 		With(middleware.CompressHandler).
-		// With(h.auditMiddleware.Audit).
 		Post("/updates/", http.HandlerFunc(h.SetMetricBulk))
 }
