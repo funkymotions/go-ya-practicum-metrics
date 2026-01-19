@@ -54,8 +54,8 @@ func (m *metricServiceStub) Ping() error {
 	return args.Error(0)
 }
 
-func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte, remoteIP string) error {
-	args := m.Called(body, signature, remoteIP)
+func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte, remoteIP string, flag bool) error {
+	args := m.Called(body, signature, remoteIP, flag)
 	return args.Error(0)
 }
 

@@ -38,8 +38,9 @@ func (h *metricHandler) SetMetricBulk(w http.ResponseWriter, r *http.Request) {
 	}
 	var metricErr *service.InvalidMetricError
 	hash := r.Header.Get("hashsha256")
+	isEncrypted := r.Header.Get("x-encrypted") == "true"
 	remoteIP := r.RemoteAddr
-	err = h.service.SetMetricBulk(body, []byte(hash), remoteIP)
+	err = h.service.SetMetricBulk(body, []byte(hash), remoteIP, isEncrypted)
 	if errors.As(err, &metricErr) {
 		w.WriteHeader(metricErr.StatusCode)
 		return

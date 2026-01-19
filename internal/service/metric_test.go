@@ -76,7 +76,7 @@ func TestNewMetricService(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := NewMetricService(tt.args.repo, []byte(""), nil)
+			actual := NewMetricService(tt.args.repo, []byte(""), nil, nil)
 			require.True(t, reflect.DeepEqual(actual, tt.want))
 		})
 	}

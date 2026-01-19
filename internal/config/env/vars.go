@@ -19,6 +19,7 @@ type Variables struct {
 	RateLimit       *int    `env:"RATE_LIMIT"`
 	AuditFile       *string `env:"AUDIT_FILE"`
 	AuditURL        *string `env:"AUDIT_URL"`
+	CryptoKey       *string `env:"CRYPTO_KEY"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -28,6 +29,7 @@ func ParseAgentOptions() *Variables {
 	var pollInterval = new(uint)
 	var key = new(string)
 	var rateLimit = new(int)
+	var cryptoKey = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -36,6 +38,7 @@ func ParseAgentOptions() *Variables {
 	flag.UintVar(pollInterval, "p", 2, "set poll interval (seconds)")
 	flag.StringVar(key, "k", "", "set key used for hashing")
 	flag.IntVar(rateLimit, "l", 0, "set rate limit (requests per second), 0 means no limit")
+	flag.StringVar(cryptoKey, "crypto-key", "", "RSA public key path")
 	flag.Parse()
 	return &Variables{
 		Endpoint: func() *string {
@@ -69,6 +72,12 @@ func ParseAgentOptions() *Variables {
 			}
 			return rateLimit
 		}(),
+		CryptoKey: func() *string {
+			if envVars.CryptoKey != nil {
+				return envVars.CryptoKey
+			}
+			return cryptoKey
+		}(),
 	}
 }
 
@@ -82,6 +91,7 @@ func ParseServerOptions() *Variables {
 	var key = new(string)
 	var auditFile = new(string)
 	var auditURL = new(string)
+	var cryptoKey = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -93,6 +103,7 @@ func ParseServerOptions() *Variables {
 	flag.StringVar(key, "k", "", "set key used for hashing")
 	flag.StringVar(auditFile, "audit-file", "", "set audit file path")
 	flag.StringVar(auditURL, "audit-url", "", "set audit service URL")
+	flag.StringVar(cryptoKey, "crypto-key", "", "RSA private key path")
 	flag.Parse()
 	return &Variables{
 		Endpoint: func() *string {
@@ -143,6 +154,12 @@ func ParseServerOptions() *Variables {
 				return envVars.AuditURL
 			}
 			return auditURL
+		}(),
+		CryptoKey: func() *string {
+			if envVars.CryptoKey != nil {
+				return envVars.CryptoKey
+			}
+			return cryptoKey
 		}(),
 	}
 }
