@@ -15,7 +15,7 @@ type metricService interface {
 	GetMetricByModel(m *models.Metrics) (*models.Metrics, error)
 	GetMetric(metricType, name string) (*models.Metrics, error)
 	GetAllMetricsForHTML() string
-	SetMetricBulk([]byte, []byte) error
+	SetMetricBulk([]byte, []byte, string) error
 	Ping() error
 }
 
@@ -29,6 +29,9 @@ func NewMetricHandler(s metricService) *metricHandler {
 	}
 }
 
+// Register configures the HTTP routes for working with metrics on the
+// provided chi.Mux router, including health checks, HTML rendering,
+// plain-text endpoints, and JSON-based update/value APIs.
 func (h *metricHandler) Register(engine *chi.Mux) {
 	engine.Get("/ping", h.Ping)
 	engine.
@@ -42,6 +45,7 @@ func (h *metricHandler) Register(engine *chi.Mux) {
 	engine.
 		With(middleware.CompressHandler).
 		Post("/value/", http.HandlerFunc(h.GetMetricByJSON))
-	engine.With(middleware.CompressHandler).
+	engine.
+		With(middleware.CompressHandler).
 		Post("/updates/", http.HandlerFunc(h.SetMetricBulk))
 }

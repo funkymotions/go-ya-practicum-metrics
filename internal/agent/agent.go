@@ -139,7 +139,6 @@ func (m *agent) processMetricsByWorker(stopCh chan struct{}, jobs chan models.Me
 }
 
 func (m *agent) processMetric(metric models.Metrics) error {
-	fmt.Printf("sending HTTP request for metric ID: %s\n", metric.ID)
 	body, err := json.Marshal(metric)
 	if err != nil {
 		return err

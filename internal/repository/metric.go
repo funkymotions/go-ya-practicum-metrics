@@ -320,7 +320,7 @@ func (r *metricRepository) upsertMetric(tx *sql.Tx, m *models.Metrics) error {
 	if r.driver == nil {
 		return fmt.Errorf("DB is not initialized")
 	}
-	r.logger.Info("Upserting metric to DB", zap.String("metric", m.String()))
+	r.logger.Debug("Upserting metric to DB", zap.String("metric", m.String()))
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var query string
@@ -434,7 +434,7 @@ func (r *metricRepository) initDBSchema() {
 		r.logger.Error("Error applying migrations:", zap.Error(err))
 		return
 	}
-	r.logger.Info("Database migrations applied successfully")
+	r.logger.Debug("Database migrations applied successfully")
 }
 
 func (r *metricRepository) cacheMetricTypeIDs() error {

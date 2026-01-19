@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
@@ -22,6 +24,7 @@ type Server struct {
 	logger            *zap.Logger
 	stopCh            chan struct{}
 	doneCh            chan struct{}
+	auditDoneCh       chan struct{}
 	shouldWaitForDone bool
 }
 
@@ -36,8 +39,9 @@ func (s *Server) Shutdown() {
 	close(s.stopCh)
 	if s.shouldWaitForDone {
 		<-s.doneCh
-		s.logger.Info("All goroutines have exited")
 	}
+	<-s.auditDoneCh
+	s.logger.Info("All goroutines have exited")
 }
 
 func NewServer(v *appenv.Variables) *Server {
@@ -55,6 +59,7 @@ func NewServer(v *appenv.Variables) *Server {
 	// channels
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
+	auditDoneCh := make(chan struct{})
 	// repositories
 	metricRepo := repository.NewMetricRepository(
 		*v.FileStoragePath,
@@ -64,13 +69,19 @@ func NewServer(v *appenv.Variables) *Server {
 		stopCh,
 		doneCh,
 	)
+
 	// services
-	metricService := service.NewMetricService(metricRepo, []byte(*v.Key))
+	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
+	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService)
+
 	// handlers
 	metricHandler := handler.NewMetricHandler(metricService)
+
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
+	r.Mount("/debug/pprof/", http.DefaultServeMux)
+
 	// register metrics entries
 	metricHandler.Register(r)
 	httpSrv := &http.Server{
@@ -82,6 +93,7 @@ func NewServer(v *appenv.Variables) *Server {
 		logger:            logger,
 		stopCh:            stopCh,
 		doneCh:            doneCh,
+		auditDoneCh:       auditDoneCh,
 		shouldWaitForDone: *v.StoreInterval != 0,
 	}
 }

@@ -24,6 +24,10 @@ func (e *InvalidMetricError) Error() string {
 	return fmt.Sprintf("code %d: %s", e.StatusCode, e.Message)
 }
 
+type auditPublisher interface {
+	Notify(metrics interface{}, ipAddress string)
+}
+
 type metricRepoInterface interface {
 	SetGauge(name string, parameter float64)
 	SetCounter(name string, parameter int64)
@@ -39,13 +43,15 @@ type metricService struct {
 	repo       metricRepoInterface
 	re         *regexp.Regexp
 	hashSecret []byte
+	audit      auditPublisher
 }
 
-func NewMetricService(repo metricRepoInterface, hashSecret []byte) *metricService {
+func NewMetricService(repo metricRepoInterface, hashSecret []byte, audit auditPublisher) *metricService {
 	return &metricService{
 		repo:       repo,
 		re:         regexp.MustCompile(`^\w+$`),
 		hashSecret: hashSecret,
+		audit:      audit,
 	}
 }
 
@@ -178,7 +184,7 @@ func (s *metricService) Ping() error {
 	return s.repo.Ping()
 }
 
-func (s *metricService) SetMetricBulk(input []byte, signature []byte) error {
+func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP string) error {
 	if len(s.hashSecret) > 0 {
 		if ok := isHashValid(signature, input, s.hashSecret); !ok {
 			return &InvalidMetricError{
@@ -194,7 +200,12 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte) error {
 			StatusCode: http.StatusBadRequest,
 		}
 	}
-	return s.repo.SetMetricBulk(&metrics)
+	err := s.repo.SetMetricBulk(&metrics)
+	if err == nil {
+		s.audit.Notify(metrics, remoteIP)
+	}
+
+	return err
 }
 
 func isMetricNameAlphanumeric(input string, r *regexp.Regexp) bool {

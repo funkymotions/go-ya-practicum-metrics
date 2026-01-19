@@ -11,6 +11,12 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# log files
+*.log
+
+# JSON files
+payload.json
+
 # Binaries
 cmd/agent/main
 cmd/agent/agent
