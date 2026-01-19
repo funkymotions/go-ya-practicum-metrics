@@ -1,11 +1,37 @@
 package env
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
+	"os"
 
 	"github.com/caarlos0/env/v11"
 )
+
+type GenericParameter interface {
+	int | uint | string | bool
+}
+
+type AgentConfigJSON struct {
+	Endpoint       *string `json:"address"`
+	ReportInterval *uint   `json:"report_interval"`
+	PollInterval   *uint   `json:"poll_interval"`
+	Key            *string `json:"key"`
+	CryptoKey      *string `json:"crypto_key"`
+}
+
+type ServerConfigJSON struct {
+	Endpoint        *string `json:"address"`
+	StoreInterval   *uint   `json:"store_interval"`
+	FileStoragePath *string `json:"store_file"`
+	Restore         *bool   `json:"restore"`
+	DatabaseDSN     *string `json:"database_dsn"`
+	Key             *string `json:"key"`
+	AuditFile       *string `json:"audit_file"`
+	AuditURL        *string `json:"audit_url"`
+	CryptoKey       *string `json:"crypto_key"`
+}
 
 type Variables struct {
 	Endpoint        *string `env:"ADDRESS"`
@@ -20,6 +46,7 @@ type Variables struct {
 	AuditFile       *string `env:"AUDIT_FILE"`
 	AuditURL        *string `env:"AUDIT_URL"`
 	CryptoKey       *string `env:"CRYPTO_KEY"`
+	ConfigFile      *string `env:"CONFIG"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -30,6 +57,7 @@ func ParseAgentOptions() *Variables {
 	var key = new(string)
 	var rateLimit = new(int)
 	var cryptoKey = new(string)
+	var configFlag = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -39,45 +67,24 @@ func ParseAgentOptions() *Variables {
 	flag.StringVar(key, "k", "", "set key used for hashing")
 	flag.IntVar(rateLimit, "l", 0, "set rate limit (requests per second), 0 means no limit")
 	flag.StringVar(cryptoKey, "crypto-key", "", "RSA public key path")
+	flag.StringVar(configFlag, "config", "", "set path to config file")
 	flag.Parse()
+
+	e := endpointFlag.String()
+	endpointParam := chooseParameter(envVars.Endpoint, &e, nil)
+	reportIntervalParam := chooseParameter(envVars.ReportInterval, reportInterval, nil)
+	pollIntervalParam := chooseParameter(envVars.PollInterval, pollInterval, nil)
+	keyParam := chooseParameter(envVars.Key, key, nil)
+	rateLimitParam := chooseParameter(envVars.RateLimit, rateLimit, nil)
+	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, nil)
+
 	return &Variables{
-		Endpoint: func() *string {
-			if envVars.Endpoint != nil {
-				return envVars.Endpoint
-			}
-			res := endpointFlag.String()
-			return &res
-		}(),
-		ReportInterval: func() *uint {
-			if envVars.ReportInterval != nil {
-				return envVars.ReportInterval
-			}
-			return reportInterval
-		}(),
-		PollInterval: func() *uint {
-			if envVars.PollInterval != nil {
-				return envVars.PollInterval
-			}
-			return pollInterval
-		}(),
-		Key: func() *string {
-			if envVars.Key != nil {
-				return envVars.Key
-			}
-			return key
-		}(),
-		RateLimit: func() *int {
-			if envVars.RateLimit != nil {
-				return envVars.RateLimit
-			}
-			return rateLimit
-		}(),
-		CryptoKey: func() *string {
-			if envVars.CryptoKey != nil {
-				return envVars.CryptoKey
-			}
-			return cryptoKey
-		}(),
+		Endpoint:       &endpointParam,
+		ReportInterval: &reportIntervalParam,
+		PollInterval:   &pollIntervalParam,
+		Key:            &keyParam,
+		RateLimit:      &rateLimitParam,
+		CryptoKey:      &cryptoKeyParam,
 	}
 }
 
@@ -92,9 +99,11 @@ func ParseServerOptions() *Variables {
 	var auditFile = new(string)
 	var auditURL = new(string)
 	var cryptoKey = new(string)
+	var configFlag = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
+
 	flag.UintVar(storeInterval, "i", 300, "set store interval (seconds)")
 	flag.StringVar(fileStoragePath, "f", "tmp/metrics-db.json", "set file storage path")
 	flag.BoolVar(restore, "r", false, "set restore")
@@ -104,62 +113,53 @@ func ParseServerOptions() *Variables {
 	flag.StringVar(auditFile, "audit-file", "", "set audit file path")
 	flag.StringVar(auditURL, "audit-url", "", "set audit service URL")
 	flag.StringVar(cryptoKey, "crypto-key", "", "RSA private key path")
+	flag.StringVar(configFlag, "config", "", "set path to config file")
 	flag.Parse()
+
+	var configJSON ServerConfigJSON
+	if *configFlag != "" {
+		file, _ := os.ReadFile(*configFlag)
+		json.Unmarshal(file, &configJSON)
+	}
+
+	e := endpointFlag.String()
+	endpointParam := chooseParameter(envVars.Endpoint, &e, configJSON.Endpoint)
+	storeIntervalParam := chooseParameter(envVars.StoreInterval, storeInterval, configJSON.StoreInterval)
+	fileStoragePathParam := chooseParameter(envVars.FileStoragePath, fileStoragePath, configJSON.FileStoragePath)
+	restoreParam := chooseParameter(envVars.Restore, restore, configJSON.Restore)
+	databaseDSNParam := chooseParameter(envVars.DatabaseDSN, dsn, configJSON.DatabaseDSN)
+	keyParam := chooseParameter(envVars.Key, key, configJSON.Key)
+	auditFileParam := chooseParameter(envVars.AuditFile, auditFile, configJSON.AuditFile)
+	auditURLParam := chooseParameter(envVars.AuditURL, auditURL, configJSON.AuditURL)
+	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, configJSON.CryptoKey)
+
 	return &Variables{
-		Endpoint: func() *string {
-			if envVars.Endpoint != nil {
-				return envVars.Endpoint
-			}
-			res := endpointFlag.String()
-			return &res
-		}(),
-		StoreInterval: func() *uint {
-			if envVars.StoreInterval != nil {
-				return envVars.StoreInterval
-			}
-			return storeInterval
-		}(),
-		FileStoragePath: func() *string {
-			if envVars.FileStoragePath != nil {
-				return envVars.FileStoragePath
-			}
-			return fileStoragePath
-		}(),
-		Restore: func() *bool {
-			if envVars.Restore != nil {
-				return envVars.Restore
-			}
-			return restore
-		}(),
-		DatabaseDSN: func() *string {
-			if envVars.DatabaseDSN != nil {
-				return envVars.DatabaseDSN
-			}
-			return dsn
-		}(),
-		Key: func() *string {
-			if envVars.Key != nil {
-				return envVars.Key
-			}
-			return key
-		}(),
-		AuditFile: func() *string {
-			if envVars.AuditFile != nil {
-				return envVars.AuditFile
-			}
-			return auditFile
-		}(),
-		AuditURL: func() *string {
-			if envVars.AuditURL != nil {
-				return envVars.AuditURL
-			}
-			return auditURL
-		}(),
-		CryptoKey: func() *string {
-			if envVars.CryptoKey != nil {
-				return envVars.CryptoKey
-			}
-			return cryptoKey
-		}(),
+		Endpoint:        &endpointParam,
+		StoreInterval:   &storeIntervalParam,
+		FileStoragePath: &fileStoragePathParam,
+		Restore:         &restoreParam,
+		DatabaseDSN:     &databaseDSNParam,
+		Key:             &keyParam,
+		AuditFile:       &auditFileParam,
+		AuditURL:        &auditURLParam,
+		CryptoKey:       &cryptoKeyParam,
+	}
+}
+
+// chooseParameter selects the marameter valuse based on the priority:
+// environment variable > command-line flag > config file > zero value
+// cmd flag pointer always non-nil but may point to zero value of T or a default value,
+// so we need to check for that case explicitly
+func chooseParameter[T GenericParameter](envVal *T, flagVal *T, jsonVal *T) T {
+	var zero T
+	switch {
+	case envVal != nil:
+		return *envVal
+	case flagVal != nil && *flagVal != zero:
+		return *flagVal
+	case jsonVal != nil:
+		return *jsonVal
+	default:
+		return zero
 	}
 }

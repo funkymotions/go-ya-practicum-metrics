@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 )
@@ -84,7 +83,6 @@ func DecryptRSA(input []byte, key *rsa.PrivateKey) ([]byte, error) {
 }
 
 func EncryptRSA(input []byte, key *rsa.PublicKey) ([]byte, error) {
-	fmt.Printf("EncryptRSA: pubKey = %+v\n", key)
 	encryptedBytes, err := rsa.EncryptPKCS1v15(rand.Reader, key, input)
 	if err != nil {
 		return nil, err
