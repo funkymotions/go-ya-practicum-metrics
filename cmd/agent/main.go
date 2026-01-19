@@ -9,8 +9,13 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/agent"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 	"go.uber.org/zap"
 )
+
+var buildVersion string
+var buildDate string
+var buildCommit string
 
 func main() {
 	l, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
@@ -41,5 +46,7 @@ func main() {
 			HeaderName: "hashsha256",
 		},
 	})
+
+	log.Printf("%s", utils.GetAppMetaInfo(buildVersion, buildDate, buildCommit))
 	agent.Launch()
 }
