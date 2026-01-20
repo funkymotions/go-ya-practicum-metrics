@@ -20,7 +20,7 @@ func main() {
 	s := server.NewServer(options)
 	sigChan := make(chan os.Signal, 1)
 	errChan := make(chan error, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	log.Printf("%s", utils.GetAppMetaInfo(buildVersion, buildDate, buildCommit))
 
 	// run server in a separate goroutine to control graceful shutdown

@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
@@ -126,7 +127,7 @@ func (m *agent) Launch() {
 		}
 	}
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	fmt.Printf("Agent is running. Press Ctrl+C to stop.\n")
 	<-c
 }
