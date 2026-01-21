@@ -80,6 +80,7 @@ func Test_agent_sendMetrics(t *testing.T) {
 	}
 	type args struct {
 		stop chan struct{}
+		done chan struct{}
 	}
 	tests := []struct {
 		name   string
@@ -116,6 +117,7 @@ func Test_agent_sendMetrics(t *testing.T) {
 			},
 			args: args{
 				stop: make(chan struct{}),
+				done: make(chan struct{}),
 			},
 			want: true,
 		},
@@ -128,7 +130,7 @@ func Test_agent_sendMetrics(t *testing.T) {
 				config:  tt.fields.config,
 				metrics: tt.fields.metrics,
 			}
-			go m.sendMetrics(tt.args.stop)
+			go m.sendMetrics(tt.args.stop, tt.args.done)
 			time.Sleep(150 * time.Millisecond)
 			require.Equal(t, tt.want, isServerWasCalled.Load().(bool))
 		})
@@ -143,6 +145,7 @@ func Test_agent_collectMetrics(t *testing.T) {
 	}
 	type args struct {
 		stop chan struct{}
+		done chan struct{}
 	}
 	tests := []struct {
 		name   string
@@ -169,7 +172,7 @@ func Test_agent_collectMetrics(t *testing.T) {
 				config:  tt.fields.config,
 				metrics: tt.fields.metrics,
 			}
-			go m.collectMetrics(tt.args.stop)
+			go m.collectMetrics(tt.args.stop, tt.args.done)
 			time.Sleep(100 * time.Millisecond)
 			m.mu.Lock()
 			result := len(m.metrics)
