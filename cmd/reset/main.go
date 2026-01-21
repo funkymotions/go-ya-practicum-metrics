@@ -45,7 +45,7 @@ func main() {
 
 	for _, fileInfo := range markedFiles {
 		fmt.Printf("Processing file: %s\n", fileInfo.path)
-		hanldeGenerateResetForFile(fileInfo)
+		handleGenerateResetForFile(fileInfo)
 	}
 }
 
@@ -56,7 +56,6 @@ func findGoFiles(rootDir string) ([]string, error) {
 			return err
 		}
 		if !d.IsDir() && strings.HasSuffix(d.Name(), ".go") {
-			fmt.Printf("Found Go file: %s\n", path)
 			goFiles = append(goFiles, path)
 		}
 		return nil
@@ -84,20 +83,20 @@ func getMarkedFiles(files []string) ([]fileInfo, error) {
 			fmt.Printf("Error parsing file %s: %v\n", path, err)
 			continue
 		}
-		hasGanerage := false
+		hasGanerate := false
 		for _, commentGroup := range file.Comments {
 			for _, comment := range commentGroup.List {
 				if strings.Contains(comment.Text, "// generate:reset") {
-					hasGanerage = true
+					hasGanerate = true
 					break
 				}
 			}
-			if hasGanerage {
+			if hasGanerate {
 				break
 			}
 		}
 
-		if hasGanerage {
+		if hasGanerate {
 			result = append(result, fileInfo{path: path, ast: file, fileSet: fset})
 		}
 	}
@@ -109,7 +108,7 @@ func getMarkedFiles(files []string) ([]fileInfo, error) {
 	return result, nil
 }
 
-func hanldeGenerateResetForFile(fileInfo fileInfo) {
+func handleGenerateResetForFile(fileInfo fileInfo) {
 	p := filepath.Dir(fileInfo.path) + "/" + filename
 	file, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
@@ -166,7 +165,6 @@ func extractDocComments(ts *ast.TypeSpec, file *ast.File) *ast.CommentGroup {
 }
 
 func hasGenerateResetComment(cg *ast.CommentGroup) bool {
-	fmt.Printf("Checking comments: %+v\n", cg)
 	if cg == nil {
 		return false
 	}
@@ -188,7 +186,6 @@ func generateResetMethod(fset *token.FileSet, file *ast.File, ts *ast.TypeSpec) 
 	out.Write(nl)
 	for _, field := range ts.Type.(*ast.StructType).Fields.List {
 		for _, name := range field.Names {
-			fmt.Printf("resetting field: %s of type %+v\n", name.Name, field.Type)
 			resetLine := getResetDirectiveByField(name, field.Type, fset, file) + "\n"
 			out.Write([]byte(resetLine))
 		}
@@ -289,6 +286,7 @@ func resetStruct(fieldName *ast.Ident, typeName string, file *ast.File) string {
 	if typeName != "" && hasResetMethod(typeName, file) {
 		return fmt.Sprintf("\tx.%s.Reset()", fieldName.Name)
 	}
+
 	return fmt.Sprintf("\t// TODO: reset for struct field %s (%s) without Reset()", fieldName.Name, typeName)
 }
 
@@ -311,5 +309,6 @@ func hasResetMethod(typeName string, file *ast.File) bool {
 			}
 		}
 	}
+
 	return false
 }
