@@ -266,8 +266,8 @@ func (r *metricRepository) SetMetricBulk(m *[]models.Metrics) error {
 				}
 				return
 			}
-			if err := tx.Commit(); err != nil {
-				r.logger.Error("Error committing transaction:", zap.Error(err))
+			if txErr := tx.Commit(); txErr != nil {
+				r.logger.Error("Error committing transaction:", zap.Error(txErr))
 			}
 		}()
 		if err != nil {

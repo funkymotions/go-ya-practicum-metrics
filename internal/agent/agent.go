@@ -108,29 +108,45 @@ func (m *agent) Launch() {
 		zap.Duration("pollInterval", m.config.PollInterval),
 	)
 	stop := make(chan struct{})
-	defer close(stop)
+	done1 := make(chan struct{})
+	done2 := make(chan struct{}, m.config.RateLimit)
 	fmt.Printf("Agent started with RateLimit = %d\n", m.config.RateLimit)
 	if m.config.RateLimit == 0 {
-		go m.collectMetrics(stop)
-		go m.sendMetrics(stop)
+		go m.collectMetrics(stop, done1)
+		go m.sendMetrics(stop, done2)
 	} else {
 		jobs := make(chan models.Metrics, runtime.NumCPU()+35)
-		go m.collectMetricsByWorker(stop, jobs)
+		go m.collectMetricsByWorker(stop, done1, jobs)
 		// start sender
 		for i := 0; i < m.config.RateLimit; i++ {
-			go m.processMetricsByWorker(stop, jobs)
+			go m.processMetricsByWorker(stop, done2, jobs)
 		}
 	}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	fmt.Printf("Agent is running. Press Ctrl+C to stop.\n")
-	<-c
+	allDone := make(chan struct{})
+	go func() {
+		<-c
+		close(stop)
+		<-done1
+		if m.config.RateLimit > 0 {
+			for i := 0; i < m.config.RateLimit; i++ {
+				<-done2
+			}
+		} else {
+			<-done2
+		}
+		close(allDone)
+	}()
+	<-allDone
 }
 
-func (m *agent) processMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
+func (m *agent) processMetricsByWorker(stopCh chan struct{}, doneCh chan struct{}, jobs chan models.Metrics) {
 	for {
 		select {
 		case <-stopCh:
+			doneCh <- struct{}{}
 			return
 		case job := <-jobs:
 			m.processMetric(job)
@@ -152,10 +168,11 @@ func (m *agent) processMetric(metric models.Metrics) error {
 		return err
 	}
 	defer resp.Body.Close()
+
 	return nil
 }
 
-func (m *agent) collectMetricsByWorker(stopCh chan struct{}, jobs chan models.Metrics) {
+func (m *agent) collectMetricsByWorker(stopCh chan struct{}, doneCh chan struct{}, jobs chan models.Metrics) {
 	ticker := time.NewTicker(m.config.PollInterval)
 	defer ticker.Stop()
 	for {
@@ -167,13 +184,13 @@ func (m *agent) collectMetricsByWorker(stopCh chan struct{}, jobs chan models.Me
 				jobs <- metric
 			}
 		case <-stopCh:
-			close(jobs)
+			close(doneCh)
 			return
 		}
 	}
 }
 
-func (m *agent) sendMetrics(stop chan struct{}) {
+func (m *agent) sendMetrics(stop chan struct{}, done chan struct{}) {
 	url := m.config.MetricURL.String()
 	ticker := time.NewTicker(m.config.ReportInterval)
 	defer ticker.Stop()
@@ -184,6 +201,8 @@ func (m *agent) sendMetrics(stop chan struct{}) {
 				return m.performRequest(url)
 			}, 0, m.config.MaxRetries)
 		case <-stop:
+			fmt.Printf("Stopping metrics sending...\n")
+			close(done)
 			return
 		}
 	}
@@ -225,7 +244,7 @@ func (m *agent) performRequest(url string) (err error) {
 	return nil
 }
 
-func (m *agent) collectMetrics(stop chan struct{}) {
+func (m *agent) collectMetrics(stop, done chan struct{}) {
 	ticker := time.NewTicker(m.config.PollInterval)
 	defer ticker.Stop()
 	for {
@@ -233,6 +252,8 @@ func (m *agent) collectMetrics(stop chan struct{}) {
 		case <-ticker.C:
 			m.collectRuntimeMetrics()
 		case <-stop:
+			fmt.Printf("Stopping metrics collection...\n")
+			close(done)
 			return
 		}
 	}
