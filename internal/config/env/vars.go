@@ -13,15 +13,16 @@ type GenericParameter interface {
 	int | uint | string | bool
 }
 
-type AgentConfigJSON struct {
+type agentConfigJSON struct {
 	Endpoint       *string `json:"address"`
 	ReportInterval *uint   `json:"report_interval"`
 	PollInterval   *uint   `json:"poll_interval"`
+	RateLimit      *int    `json:"rate_limit"`
 	Key            *string `json:"key"`
 	CryptoKey      *string `json:"crypto_key"`
 }
 
-type ServerConfigJSON struct {
+type serverConfigJSON struct {
 	Endpoint        *string `json:"address"`
 	StoreInterval   *uint   `json:"store_interval"`
 	FileStoragePath *string `json:"store_file"`
@@ -61,6 +62,7 @@ func ParseAgentOptions() *Variables {
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
+
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
 	flag.UintVar(reportInterval, "r", 10, "set report interval (seconds)")
 	flag.UintVar(pollInterval, "p", 2, "set poll interval (seconds)")
@@ -70,13 +72,22 @@ func ParseAgentOptions() *Variables {
 	flag.StringVar(configFlag, "config", "", "set path to config file")
 	flag.Parse()
 
+	var configJSON agentConfigJSON
+	if *configFlag != "" {
+		file, err := os.ReadFile(*configFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.Unmarshal(file, &configJSON)
+	}
+
 	e := endpointFlag.String()
-	endpointParam := chooseParameter(envVars.Endpoint, &e, nil)
-	reportIntervalParam := chooseParameter(envVars.ReportInterval, reportInterval, nil)
-	pollIntervalParam := chooseParameter(envVars.PollInterval, pollInterval, nil)
-	keyParam := chooseParameter(envVars.Key, key, nil)
-	rateLimitParam := chooseParameter(envVars.RateLimit, rateLimit, nil)
-	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, nil)
+	endpointParam := chooseParameter(envVars.Endpoint, &e, configJSON.Endpoint)
+	reportIntervalParam := chooseParameter(envVars.ReportInterval, reportInterval, configJSON.ReportInterval)
+	pollIntervalParam := chooseParameter(envVars.PollInterval, pollInterval, configJSON.PollInterval)
+	keyParam := chooseParameter(envVars.Key, key, configJSON.Key)
+	rateLimitParam := chooseParameter(envVars.RateLimit, rateLimit, configJSON.RateLimit)
+	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, configJSON.CryptoKey)
 
 	return &Variables{
 		Endpoint:       &endpointParam,
@@ -116,9 +127,12 @@ func ParseServerOptions() *Variables {
 	flag.StringVar(configFlag, "config", "", "set path to config file")
 	flag.Parse()
 
-	var configJSON ServerConfigJSON
+	var configJSON serverConfigJSON
 	if *configFlag != "" {
-		file, _ := os.ReadFile(*configFlag)
+		file, err := os.ReadFile(*configFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
 		json.Unmarshal(file, &configJSON)
 	}
 

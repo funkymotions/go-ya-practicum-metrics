@@ -193,7 +193,56 @@ func (s *metricService) Ping() error {
 	return s.repo.Ping()
 }
 
-func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP string, isEncrypted bool) error {
+func (s *metricService) SetEncryptedMetricBulk(input []byte, signature []byte, remoteIP string) error {
+	var encryptedMetrics dto.EncryptedMetrics
+	if err := json.Unmarshal(input, &encryptedMetrics); err != nil {
+		return &InvalidMetricError{
+			Message:    err.Error(),
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	encryptedPayload, err := hex.DecodeString(encryptedMetrics.Payload)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "invalid payload encoding",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	encryptedSecret, err := hex.DecodeString(encryptedMetrics.Secret)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "invalid secret encoding",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	nonce, err := hex.DecodeString(encryptedMetrics.Nonce)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "invalid nonce encoding",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	symmetricKey, err := utils.DecryptRSA(encryptedSecret, s.privateKey)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "failed to decrypt symmetric key",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	decryptedPayload, err := utils.DecryptWithAESKey(encryptedPayload, symmetricKey, nonce)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "failed to decrypt payload",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+
+	input = decryptedPayload
+
+	return s.SetMetricBulk(input, signature, remoteIP)
+}
+
+func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP string) error {
 	if len(s.hashSecret) > 0 {
 		if ok := isHashValid(signature, input, s.hashSecret); !ok {
 			return &InvalidMetricError{
@@ -201,52 +250,6 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP s
 				StatusCode: http.StatusBadRequest,
 			}
 		}
-	}
-
-	if isEncrypted {
-		var encryptedMetrics dto.EncryptedMetrics
-		if err := json.Unmarshal(input, &encryptedMetrics); err != nil {
-			return &InvalidMetricError{
-				Message:    err.Error(),
-				StatusCode: http.StatusBadRequest,
-			}
-		}
-		encryptedPayload, err := hex.DecodeString(encryptedMetrics.Payload)
-		if err != nil {
-			return &InvalidMetricError{
-				Message:    "invalid payload encoding",
-				StatusCode: http.StatusBadRequest,
-			}
-		}
-		encryptedSecret, err := hex.DecodeString(encryptedMetrics.Secret)
-		if err != nil {
-			return &InvalidMetricError{
-				Message:    "invalid secret encoding",
-				StatusCode: http.StatusBadRequest,
-			}
-		}
-		nonce, err := hex.DecodeString(encryptedMetrics.Nonce)
-		if err != nil {
-			return &InvalidMetricError{
-				Message:    "invalid nonce encoding",
-				StatusCode: http.StatusBadRequest,
-			}
-		}
-		symmetricKey, err := utils.DecryptRSA(encryptedSecret, s.privateKey)
-		if err != nil {
-			return &InvalidMetricError{
-				Message:    "failed to decrypt symmetric key",
-				StatusCode: http.StatusBadRequest,
-			}
-		}
-		decryptedPayload, err := utils.DecryptWithAESKey(encryptedPayload, symmetricKey, nonce)
-		if err != nil {
-			return &InvalidMetricError{
-				Message:    "failed to decrypt payload",
-				StatusCode: http.StatusBadRequest,
-			}
-		}
-		input = decryptedPayload
 	}
 
 	var metrics []models.Metrics
