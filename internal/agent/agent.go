@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -79,7 +80,8 @@ type Config struct {
 		Key        *string
 		HeaderName string
 	}
-	PubKey *rsa.PublicKey
+	PubKey    *rsa.PublicKey
+	IPAddress string
 }
 
 type retriableError struct {
@@ -232,6 +234,8 @@ func (m *agent) performRequest(url string) (err error) {
 	}
 	r.Header.Set("Content-Type", contentType)
 	r.Header.Set("Accept-Encoding", "gzip")
+	ip := getAgentIP()
+	r.Header.Set("X-Real-IP", ip)
 	if m.config.Hashing.Key != nil && *m.config.Hashing.Key != "" {
 		hValue := hashBodyByKey(m.config.Hashing.Key, body)
 		r.Header.Set(m.config.Hashing.HeaderName, hValue)
@@ -359,4 +363,36 @@ func prepareRequestBody(m map[string]models.Metrics) []byte {
 	}
 	jsonData, _ := json.Marshal(metrics)
 	return jsonData
+}
+
+func getAgentIP() string {
+	// Search for loopback IP address across network interfaces
+	// For siplicity and in terms of practice, return only loopback IP address
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		addresses, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addresses {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip.IsLoopback() {
+				return ip.String()
+			}
+
+			return ""
+		}
+	}
+
+	return ""
 }

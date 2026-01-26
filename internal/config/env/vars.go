@@ -32,6 +32,7 @@ type serverConfigJSON struct {
 	AuditFile       *string `json:"audit_file"`
 	AuditURL        *string `json:"audit_url"`
 	CryptoKey       *string `json:"crypto_key"`
+	TrustedSubnet   *string `json:"trusted_subnet"`
 }
 
 type Variables struct {
@@ -48,6 +49,7 @@ type Variables struct {
 	AuditURL        *string `env:"AUDIT_URL"`
 	CryptoKey       *string `env:"CRYPTO_KEY"`
 	ConfigFile      *string `env:"CONFIG"`
+	TrustedSubnet   *string `env:"TRUSTED_SUBNET"`
 }
 
 func ParseAgentOptions() *Variables {
@@ -111,6 +113,7 @@ func ParseServerOptions() *Variables {
 	var auditURL = new(string)
 	var cryptoKey = new(string)
 	var configFlag = new(string)
+	var trustedSubnet = new(string)
 	if err := env.Parse(&envVars); err != nil {
 		log.Fatal(err)
 	}
@@ -125,6 +128,7 @@ func ParseServerOptions() *Variables {
 	flag.StringVar(auditURL, "audit-url", "", "set audit service URL")
 	flag.StringVar(cryptoKey, "crypto-key", "", "RSA private key path")
 	flag.StringVar(configFlag, "config", "", "set path to config file")
+	flag.StringVar(trustedSubnet, "t", "", "set trusted subnet mask")
 	flag.Parse()
 
 	var configJSON serverConfigJSON
@@ -146,6 +150,7 @@ func ParseServerOptions() *Variables {
 	auditFileParam := chooseParameter(envVars.AuditFile, auditFile, configJSON.AuditFile)
 	auditURLParam := chooseParameter(envVars.AuditURL, auditURL, configJSON.AuditURL)
 	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, configJSON.CryptoKey)
+	trustedSubnetParam := chooseParameter(envVars.TrustedSubnet, trustedSubnet, configJSON.TrustedSubnet)
 
 	return &Variables{
 		Endpoint:        &endpointParam,
@@ -157,6 +162,7 @@ func ParseServerOptions() *Variables {
 		AuditFile:       &auditFileParam,
 		AuditURL:        &auditURLParam,
 		CryptoKey:       &cryptoKeyParam,
+		TrustedSubnet:   &trustedSubnetParam,
 	}
 }
 

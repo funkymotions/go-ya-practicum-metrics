@@ -91,6 +91,9 @@ func NewServer(v *appenv.Variables) *Server {
 	// routing
 	r := chi.NewRouter()
 	r.Use(middleware.HTTPLogMiddleware(logger))
+	if *v.TrustedSubnet != "" {
+		r.Use(middleware.CheckCIDR(*v.TrustedSubnet))
+	}
 	r.Mount("/debug/pprof/", http.DefaultServeMux)
 
 	// register metrics entries
