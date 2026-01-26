@@ -32,6 +32,7 @@ func main() {
 			log.Fatalf("failed to read RSA public key: %v", err)
 		}
 	}
+
 	agent := agent.NewAgent(&agent.Config{
 		Logger: l,
 		PubKey: pubKey,
