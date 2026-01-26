@@ -27,7 +27,7 @@ type repositories struct {
 	metricRepo ports.MetricRepoInterface
 }
 
-type Server struct {
+type App struct {
 	stopCh            chan struct{}
 	doneCh            chan struct{}
 	auditDoneCh       chan struct{}
@@ -44,7 +44,7 @@ type baseServerOpts struct {
 	repositories repositories
 }
 
-func (s *Server) Run() error {
+func (s *App) Run() error {
 	errgroup := new(errgroup.Group)
 	errgroup.Go(func() error {
 		return s.httpServer.Run()
@@ -59,7 +59,7 @@ func (s *Server) Run() error {
 	return nil
 }
 
-func (s *Server) Shutdown() {
+func (s *App) Shutdown() {
 	// notify all subscribed goroutines to exit
 	s.httpServer.Shutdown()
 	s.grpcServer.Shutdown()
@@ -71,7 +71,7 @@ func (s *Server) Shutdown() {
 	s.opts.logger.Info("All goroutines have exited")
 }
 
-func NewServer(v *appenv.Variables) *Server {
+func NewApp(v *appenv.Variables) *App {
 	// db
 	if v.DatabaseDSN == nil {
 		log.Fatal("database dsn is not set")
@@ -123,11 +123,10 @@ func NewServer(v *appenv.Variables) *Server {
 		},
 	}
 
-	// HTTP server
 	http := NewHTTPServer(baseOpts)
 	grpc := NewGRPCServer(baseOpts)
 
-	return &Server{
+	return &App{
 		httpServer:        http,
 		grpcServer:        grpc,
 		stopCh:            stopCh,

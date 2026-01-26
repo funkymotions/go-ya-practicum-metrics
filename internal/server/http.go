@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
@@ -47,5 +48,5 @@ func (h *httpServer) Run() error {
 }
 
 func (h *httpServer) Shutdown() error {
-	return h.server.Close()
+	return h.server.Shutdown(context.TODO())
 }

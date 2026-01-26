@@ -14,8 +14,6 @@ import (
 
 type grpcServer struct {
 	grpc   *grpc.Server
-	stopCh chan struct{}
-	doneCh chan struct{}
 	logger *zap.Logger
 }
 
@@ -23,7 +21,10 @@ func NewGRPCServer(
 	opts baseServerOpts,
 ) *grpcServer {
 	metricServer := grpc_handler.NewMetricGRPCHandler(opts.services.metricsService)
-	srv := grpc.NewServer(grpc.UnaryInterceptor(grpc_middleware.UnaryCIDRInterceptor(*opts.vars.TrustedSubnet)))
+	srv := grpc.NewServer(
+		grpc.UnaryInterceptor(grpc_middleware.UnaryCIDRInterceptor(*opts.vars.TrustedSubnet)),
+	)
+
 	proto.RegisterMetricsServer(srv, metricServer)
 	lo, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	if err != nil {
