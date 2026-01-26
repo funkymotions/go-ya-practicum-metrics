@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func (m *metricServiceStub) SetEncryptedMetricBulk(body []byte, signature []byte
 
 func TestNewMetricHandler(t *testing.T) {
 	type args struct {
-		s metricService
+		s ports.MetricService
 	}
 	tests := []struct {
 		name string
@@ -93,7 +94,7 @@ func TestNewMetricHandler(t *testing.T) {
 
 func Test_metricHandler_SetMetric(t *testing.T) {
 	type fields struct {
-		service metricService
+		service ports.MetricService
 	}
 	type args struct {
 		entry              string
@@ -237,7 +238,7 @@ func Test_metricHandler_SetMetric(t *testing.T) {
 
 func Test_metricHandler_GetAllMetrics(t *testing.T) {
 	type fields struct {
-		service metricService
+		service ports.MetricService
 	}
 	type args struct {
 	}
@@ -291,7 +292,7 @@ func Test_metricHandler_GetAllMetrics(t *testing.T) {
 func Test_metricHandler_GetMetric(t *testing.T) {
 	var metricCounterValue = 1.1
 	type fields struct {
-		service metricService
+		service ports.MetricService
 	}
 	type args struct {
 		metricType string

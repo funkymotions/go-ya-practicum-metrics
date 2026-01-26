@@ -20,6 +20,7 @@ type agentConfigJSON struct {
 	RateLimit      *int    `json:"rate_limit"`
 	Key            *string `json:"key"`
 	CryptoKey      *string `json:"crypto_key"`
+	EndpointGRPC   *string `json:"grpc_address"`
 }
 
 type serverConfigJSON struct {
@@ -33,6 +34,7 @@ type serverConfigJSON struct {
 	AuditURL        *string `json:"audit_url"`
 	CryptoKey       *string `json:"crypto_key"`
 	TrustedSubnet   *string `json:"trusted_subnet"`
+	EndpointGRPC    *string `json:"grpc_address"`
 }
 
 type Variables struct {
@@ -50,11 +52,13 @@ type Variables struct {
 	CryptoKey       *string `env:"CRYPTO_KEY"`
 	ConfigFile      *string `env:"CONFIG"`
 	TrustedSubnet   *string `env:"TRUSTED_SUBNET"`
+	EndpointGRPC    *string `env:"GRPC_ADDRESS"`
 }
 
 func ParseAgentOptions() *Variables {
 	var envVars Variables
 	var endpointFlag = &Endpoint{Hostname: "localhost", Port: 8080}
+	var grpcEndpoint = &Endpoint{Hostname: "localhost", Port: 9090}
 	var reportInterval = new(uint)
 	var pollInterval = new(uint)
 	var key = new(string)
@@ -66,6 +70,7 @@ func ParseAgentOptions() *Variables {
 	}
 
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
+	flag.Var(grpcEndpoint, "grpc", "set gRPC endpoint (host:port)")
 	flag.UintVar(reportInterval, "r", 10, "set report interval (seconds)")
 	flag.UintVar(pollInterval, "p", 2, "set poll interval (seconds)")
 	flag.StringVar(key, "k", "", "set key used for hashing")
@@ -84,12 +89,14 @@ func ParseAgentOptions() *Variables {
 	}
 
 	e := endpointFlag.String()
+	grpce := grpcEndpoint.String()
 	endpointParam := chooseParameter(envVars.Endpoint, &e, configJSON.Endpoint)
 	reportIntervalParam := chooseParameter(envVars.ReportInterval, reportInterval, configJSON.ReportInterval)
 	pollIntervalParam := chooseParameter(envVars.PollInterval, pollInterval, configJSON.PollInterval)
 	keyParam := chooseParameter(envVars.Key, key, configJSON.Key)
 	rateLimitParam := chooseParameter(envVars.RateLimit, rateLimit, configJSON.RateLimit)
 	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, configJSON.CryptoKey)
+	grpcEndpointParam := chooseParameter(envVars.EndpointGRPC, &grpce, configJSON.EndpointGRPC)
 
 	return &Variables{
 		Endpoint:       &endpointParam,
@@ -98,12 +105,14 @@ func ParseAgentOptions() *Variables {
 		Key:            &keyParam,
 		RateLimit:      &rateLimitParam,
 		CryptoKey:      &cryptoKeyParam,
+		EndpointGRPC:   &grpcEndpointParam,
 	}
 }
 
 func ParseServerOptions() *Variables {
 	var envVars Variables
 	var endpointFlag = &Endpoint{Hostname: "localhost", Port: 8080}
+	var endpointGRPC = &Endpoint{Hostname: "localhost", Port: 9090}
 	var storeInterval = new(uint)
 	var fileStoragePath = new(string)
 	var restore = new(bool)
@@ -122,6 +131,7 @@ func ParseServerOptions() *Variables {
 	flag.StringVar(fileStoragePath, "f", "tmp/metrics-db.json", "set file storage path")
 	flag.BoolVar(restore, "r", false, "set restore")
 	flag.Var(endpointFlag, "a", "set endpoint (host:port)")
+	flag.Var(endpointGRPC, "grpc", "set gRPC endpoint (host:port)")
 	flag.StringVar(dsn, "d", "", "set database dsn")
 	flag.StringVar(key, "k", "", "set key used for hashing")
 	flag.StringVar(auditFile, "audit-file", "", "set audit file path")
@@ -141,6 +151,7 @@ func ParseServerOptions() *Variables {
 	}
 
 	e := endpointFlag.String()
+	grpce := endpointGRPC.String()
 	endpointParam := chooseParameter(envVars.Endpoint, &e, configJSON.Endpoint)
 	storeIntervalParam := chooseParameter(envVars.StoreInterval, storeInterval, configJSON.StoreInterval)
 	fileStoragePathParam := chooseParameter(envVars.FileStoragePath, fileStoragePath, configJSON.FileStoragePath)
@@ -151,6 +162,7 @@ func ParseServerOptions() *Variables {
 	auditURLParam := chooseParameter(envVars.AuditURL, auditURL, configJSON.AuditURL)
 	cryptoKeyParam := chooseParameter(envVars.CryptoKey, cryptoKey, configJSON.CryptoKey)
 	trustedSubnetParam := chooseParameter(envVars.TrustedSubnet, trustedSubnet, configJSON.TrustedSubnet)
+	grpcEndpointParam := chooseParameter(envVars.EndpointGRPC, &grpce, configJSON.EndpointGRPC)
 
 	return &Variables{
 		Endpoint:        &endpointParam,
@@ -163,6 +175,7 @@ func ParseServerOptions() *Variables {
 		AuditURL:        &auditURLParam,
 		CryptoKey:       &cryptoKeyParam,
 		TrustedSubnet:   &trustedSubnetParam,
+		EndpointGRPC:    &grpcEndpointParam,
 	}
 }
 

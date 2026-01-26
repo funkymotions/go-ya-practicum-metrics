@@ -17,13 +17,15 @@ var buildCommit string
 
 func main() {
 	options := env.ParseServerOptions()
+
+	// HTTP server
 	s := server.NewServer(options)
 	sigChan := make(chan os.Signal, 1)
 	errChan := make(chan error, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	log.Printf("%s", utils.GetAppMetaInfo(buildVersion, buildDate, buildCommit))
 
-	// run server in a separate goroutine to control graceful shutdown
+	// run server in a separate goroutine
 	go func() {
 		if err := s.Run(); err != nil {
 			log.Printf("Server launch error: %v\n", err)
@@ -42,4 +44,5 @@ func main() {
 	}
 
 	s.Shutdown()
+	log.Printf("Servers gracefully exited...\n")
 }

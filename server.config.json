@@ -1,4 +1,4 @@
 {
-  "audit_url": "http://audit-service.local",
-  "trusted_subnet": "127.0.0.0/8"
+  "trusted_subnet": "127.0.0.0/8",
+  "grpc_address": "localhost:9090"
 }

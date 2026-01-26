@@ -32,5 +32,6 @@ func (m *Metrics) String() string {
 		str := strconv.FormatFloat(*m.Value, 'f', -1, 64)
 		return str
 	}
+
 	return ""
 }

@@ -86,3 +86,13 @@ Showing nodes accounting for -1535.37kB, 74.92% of 2049.37kB total
          0     0% 74.92%  -512.10kB 24.99%  sync.(*Pool).Get
          0     0% 74.92%  -512.05kB 24.99%  sync.(*RWMutex).Lock
 ```
+
+
+## GRPC
+```
+protoc \
+  -I . \
+  --go_out=paths=source_relative:. \
+  --go-grpc_out=paths=source_relative:. \
+  internal/proto/metrics.proto
+```

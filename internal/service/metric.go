@@ -14,6 +14,7 @@ import (
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 )
 
@@ -30,19 +31,8 @@ type auditPublisher interface {
 	Notify(metrics interface{}, ipAddress string)
 }
 
-type metricRepoInterface interface {
-	SetGauge(name string, parameter float64)
-	SetCounter(name string, parameter int64)
-	SetGaugeIntrospect(name string, parameter float64) error
-	SetCounterIntrospect(name string, parameter int64) error
-	GetMetric(name string, metricType string) (*models.Metrics, bool)
-	GetAllMetrics() map[string]models.Metrics
-	SetMetricBulk(m *[]models.Metrics) error
-	Ping() error
-}
-
 type metricService struct {
-	repo       metricRepoInterface
+	repo       ports.MetricRepoInterface
 	re         *regexp.Regexp
 	hashSecret []byte
 	audit      auditPublisher
@@ -50,7 +40,7 @@ type metricService struct {
 }
 
 func NewMetricService(
-	repo metricRepoInterface,
+	repo ports.MetricRepoInterface,
 	hashSecret []byte,
 	audit auditPublisher,
 	privKey *rsa.PrivateKey,
@@ -294,5 +284,6 @@ func isHashValid(signature, payload, secret []byte) bool {
 	h := hmac.New(sha256.New, secret)
 	h.Write(payload)
 	hash := h.Sum(nil)
+
 	return hmac.Equal(decodedSignature, hash)
 }

@@ -4,27 +4,15 @@ import (
 	"net/http"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
-	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/go-chi/chi"
 )
 
-type metricService interface {
-	SetCounter(name string, value string) error
-	SetGauge(name string, value string) error
-	SetMetricByModel([]byte) (*models.Metrics, error)
-	GetMetricByModel(m *models.Metrics) (*models.Metrics, error)
-	GetMetric(metricType, name string) (*models.Metrics, error)
-	GetAllMetricsForHTML() string
-	SetMetricBulk([]byte, []byte, string) error
-	SetEncryptedMetricBulk(input []byte, signature []byte, remoteIP string) error
-	Ping() error
-}
-
 type metricHandler struct {
-	service metricService
+	service ports.MetricService
 }
 
-func NewMetricHandler(s metricService) *metricHandler {
+func NewMetricHandler(s ports.MetricService) *metricHandler {
 	return &metricHandler{
 		service: s,
 	}

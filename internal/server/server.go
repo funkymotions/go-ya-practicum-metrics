@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/rsa"
 	"log"
-	"net/http"
 	"time"
 
 	_ "net/http/pprof"
@@ -11,39 +10,65 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/repository"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
-	"github.com/go-chi/chi"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
+type services struct {
+	metricsService ports.MetricService
+}
+
+type repositories struct {
+	metricRepo ports.MetricRepoInterface
+}
+
 type Server struct {
-	server            *http.Server
-	logger            *zap.Logger
 	stopCh            chan struct{}
 	doneCh            chan struct{}
 	auditDoneCh       chan struct{}
 	shouldWaitForDone bool
+	opts              baseServerOpts
+	*httpServer
+	*grpcServer
+}
+
+type baseServerOpts struct {
+	vars         *appenv.Variables
+	logger       *zap.Logger
+	services     services
+	repositories repositories
 }
 
 func (s *Server) Run() error {
-	s.logger.Info("Starting server", zap.String("addr", s.server.Addr))
-	return s.server.ListenAndServe()
+	errgroup := new(errgroup.Group)
+	errgroup.Go(func() error {
+		return s.httpServer.Run()
+	})
+	errgroup.Go(func() error {
+		return s.grpcServer.Run()
+	})
+	if err := errgroup.Wait(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) Shutdown() {
-	s.logger.Warn("Shutting down server", zap.String("addr", s.server.Addr))
 	// notify all subscribed goroutines to exit
+	s.httpServer.Shutdown()
+	s.grpcServer.Shutdown()
 	close(s.stopCh)
 	if s.shouldWaitForDone {
 		<-s.doneCh
 	}
 	<-s.auditDoneCh
-	s.logger.Info("All goroutines have exited")
+	s.opts.logger.Info("All goroutines have exited")
 }
 
 func NewServer(v *appenv.Variables) *Server {
@@ -53,15 +78,18 @@ func NewServer(v *appenv.Variables) *Server {
 	}
 	dbConf := db.NewDBConfig(*v.DatabaseDSN)
 	d, _ := driver.NewSQLDriver(dbConf)
+
 	// logger
 	logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	if err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
 	}
+
 	// channels
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
 	auditDoneCh := make(chan struct{})
+
 	// repositories
 	metricRepo := repository.NewMetricRepository(
 		*v.FileStoragePath,
@@ -84,30 +112,28 @@ func NewServer(v *appenv.Variables) *Server {
 	// services
 	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
 	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService, privKey)
-
-	// handlers
-	metricHandler := handler.NewMetricHandler(metricService)
-
-	// routing
-	r := chi.NewRouter()
-	r.Use(middleware.HTTPLogMiddleware(logger))
-	if *v.TrustedSubnet != "" {
-		r.Use(middleware.CheckCIDR(*v.TrustedSubnet))
+	baseOpts := baseServerOpts{
+		vars:   v,
+		logger: logger,
+		services: services{
+			metricsService: metricService,
+		},
+		repositories: repositories{
+			metricRepo: metricRepo,
+		},
 	}
-	r.Mount("/debug/pprof/", http.DefaultServeMux)
 
-	// register metrics entries
-	metricHandler.Register(r)
-	httpSrv := &http.Server{
-		Addr:    *v.Endpoint,
-		Handler: r,
-	}
+	// HTTP server
+	http := NewHTTPServer(baseOpts)
+	grpc := NewGRPCServer(baseOpts)
+
 	return &Server{
-		server:            httpSrv,
-		logger:            logger,
+		httpServer:        http,
+		grpcServer:        grpc,
 		stopCh:            stopCh,
 		doneCh:            doneCh,
 		auditDoneCh:       auditDoneCh,
 		shouldWaitForDone: *v.StoreInterval != 0,
+		opts:              baseOpts,
 	}
 }
