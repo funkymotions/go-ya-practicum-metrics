@@ -3,10 +3,12 @@ package agent
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -14,8 +16,10 @@ import (
 	"os/signal"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 	"github.com/shirou/gopsutil/cpu"
@@ -75,6 +79,7 @@ type Config struct {
 		Key        *string
 		HeaderName string
 	}
+	PubKey *rsa.PublicKey
 }
 
 type retriableError struct {
@@ -123,7 +128,7 @@ func (m *agent) Launch() {
 		}
 	}
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	fmt.Printf("Agent is running. Press Ctrl+C to stop.\n")
 	allDone := make(chan struct{})
 	go func() {
@@ -230,6 +235,34 @@ func (m *agent) performRequest(url string) (err error) {
 	if m.config.Hashing.Key != nil && *m.config.Hashing.Key != "" {
 		hValue := hashBodyByKey(m.config.Hashing.Key, body)
 		r.Header.Set(m.config.Hashing.HeaderName, hValue)
+	}
+	if m.config.PubKey != nil {
+		symmetricKey, err := utils.CreateAESSymmetricKey()
+		if err != nil {
+			return err
+		}
+		encryptedBody, nonce, err := utils.EncryptWithAESKey(body, symmetricKey)
+		if err != nil {
+			return err
+		}
+		encryptedSymmetricKey, err := utils.EncryptRSA(symmetricKey, m.config.PubKey)
+		if err != nil {
+			return err
+		}
+		data := dto.EncryptedMetrics{
+			Payload: hex.EncodeToString(encryptedBody),
+			Secret:  hex.EncodeToString(encryptedSymmetricKey),
+			Nonce:   hex.EncodeToString(nonce),
+		}
+		serialized, err := json.Marshal(data)
+		if err != nil {
+			m.config.Logger.Error("Error marshaling encrypted data", zap.Error(err))
+			return err
+		}
+		r.ContentLength = int64(len(serialized))
+		r.Body = io.NopCloser(bytes.NewBuffer(serialized))
+		m.config.Logger.Info("Sending encrypted metrics", zap.ByteString("body", serialized))
+		r.Header.Set("x-encrypted", "true")
 	}
 	resp, err := m.config.Client.Do(r)
 	if err != nil {

@@ -51,7 +51,7 @@ func main() {
 
 func findGoFiles(rootDir string) ([]string, error) {
 	goFiles := make([]string, 0)
-	filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -60,6 +60,10 @@ func findGoFiles(rootDir string) ([]string, error) {
 		}
 		return nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	if len(goFiles) == 0 {
 		return nil, fmt.Errorf("no Go files found for root: %s", rootDir)
@@ -83,20 +87,20 @@ func getMarkedFiles(files []string) ([]fileInfo, error) {
 			fmt.Printf("Error parsing file %s: %v\n", path, err)
 			continue
 		}
-		hasGanerate := false
+		hasGenerate := false
 		for _, commentGroup := range file.Comments {
 			for _, comment := range commentGroup.List {
 				if strings.Contains(comment.Text, "// generate:reset") {
-					hasGanerate = true
+					hasGenerate = true
 					break
 				}
 			}
-			if hasGanerate {
+			if hasGenerate {
 				break
 			}
 		}
 
-		if hasGanerate {
+		if hasGenerate {
 			result = append(result, fileInfo{path: path, ast: file, fileSet: fset})
 		}
 	}
@@ -178,10 +182,10 @@ func hasGenerateResetComment(cg *ast.CommentGroup) bool {
 }
 
 func generateResetMethod(fset *token.FileSet, file *ast.File, ts *ast.TypeSpec) string {
-	sturctName := ts.Name.Name
+	structName := ts.Name.Name
 	out := strings.Builder{}
 	nl := []byte{'\n'}
-	signature := fmt.Sprintf(`func (x *%s) Reset() {`, sturctName)
+	signature := fmt.Sprintf(`func (x *%s) Reset() {`, structName)
 	out.Write([]byte(signature))
 	out.Write(nl)
 	for _, field := range ts.Type.(*ast.StructType).Fields.List {

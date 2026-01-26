@@ -16,6 +16,7 @@ type metricService interface {
 	GetMetric(metricType, name string) (*models.Metrics, error)
 	GetAllMetricsForHTML() string
 	SetMetricBulk([]byte, []byte, string) error
+	SetEncryptedMetricBulk(input []byte, signature []byte, remoteIP string) error
 	Ping() error
 }
 

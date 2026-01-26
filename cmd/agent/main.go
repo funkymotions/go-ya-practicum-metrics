@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rsa"
 	"log"
 	"net/http"
 	"net/url"
@@ -24,8 +25,16 @@ func main() {
 	}
 	maxRetrySendCount := 3
 	options := env.ParseAgentOptions()
+	var pubKey *rsa.PublicKey
+	if *options.CryptoKey != "" {
+		pubKey, err = utils.ReadRSAPublicKeyFromFile(*options.CryptoKey)
+		if err != nil {
+			log.Fatalf("failed to read RSA public key: %v", err)
+		}
+	}
 	agent := agent.NewAgent(&agent.Config{
 		Logger: l,
+		PubKey: pubKey,
 		MetricURL: url.URL{
 			Scheme: "http",
 			Host:   *options.Endpoint,

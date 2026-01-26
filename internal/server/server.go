@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/rsa"
 	"log"
 	"net/http"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/repository"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 	"github.com/go-chi/chi"
 	"go.uber.org/zap"
 )
@@ -70,9 +72,18 @@ func NewServer(v *appenv.Variables) *Server {
 		doneCh,
 	)
 
+	// read RSA private key if provided
+	var privKey *rsa.PrivateKey
+	if *v.CryptoKey != "" {
+		privKey, err = utils.ReadRSAPrivateKeyFromFile(*v.CryptoKey)
+		if err != nil {
+			log.Fatalf("failed to read RSA private key: %v", err)
+		}
+	}
+
 	// services
 	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
-	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService)
+	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService, privKey)
 
 	// handlers
 	metricHandler := handler.NewMetricHandler(metricService)

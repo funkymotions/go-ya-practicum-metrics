@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 )
@@ -44,14 +46,21 @@ type metricService struct {
 	re         *regexp.Regexp
 	hashSecret []byte
 	audit      auditPublisher
+	privateKey *rsa.PrivateKey
 }
 
-func NewMetricService(repo metricRepoInterface, hashSecret []byte, audit auditPublisher) *metricService {
+func NewMetricService(
+	repo metricRepoInterface,
+	hashSecret []byte,
+	audit auditPublisher,
+	privKey *rsa.PrivateKey,
+) *metricService {
 	return &metricService{
 		repo:       repo,
 		re:         regexp.MustCompile(`^\w+$`),
 		hashSecret: hashSecret,
 		audit:      audit,
+		privateKey: privKey,
 	}
 }
 
@@ -184,6 +193,55 @@ func (s *metricService) Ping() error {
 	return s.repo.Ping()
 }
 
+func (s *metricService) SetEncryptedMetricBulk(input []byte, signature []byte, remoteIP string) error {
+	var encryptedMetrics dto.EncryptedMetrics
+	if err := json.Unmarshal(input, &encryptedMetrics); err != nil {
+		return &InvalidMetricError{
+			Message:    err.Error(),
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	encryptedPayload, err := hex.DecodeString(encryptedMetrics.Payload)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "invalid payload encoding",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	encryptedSecret, err := hex.DecodeString(encryptedMetrics.Secret)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "invalid secret encoding",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	nonce, err := hex.DecodeString(encryptedMetrics.Nonce)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "invalid nonce encoding",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	symmetricKey, err := utils.DecryptRSA(encryptedSecret, s.privateKey)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "failed to decrypt symmetric key",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	decryptedPayload, err := utils.DecryptWithAESKey(encryptedPayload, symmetricKey, nonce)
+	if err != nil {
+		return &InvalidMetricError{
+			Message:    "failed to decrypt payload",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+
+	input = decryptedPayload
+
+	return s.SetMetricBulk(input, signature, remoteIP)
+}
+
 func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP string) error {
 	if len(s.hashSecret) > 0 {
 		if ok := isHashValid(signature, input, s.hashSecret); !ok {
@@ -193,6 +251,7 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP s
 			}
 		}
 	}
+
 	var metrics []models.Metrics
 	if err := json.NewDecoder(bytes.NewReader(input)).Decode(&metrics); err != nil {
 		return &InvalidMetricError{
