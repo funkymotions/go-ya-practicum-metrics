@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/agent/grpc"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
@@ -69,6 +72,7 @@ type agent struct {
 
 type Config struct {
 	Client         *http.Client
+	GRPCClient     *grpc.AgentGRPCClient
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 	RateLimit      int
@@ -79,7 +83,8 @@ type Config struct {
 		Key        *string
 		HeaderName string
 	}
-	PubKey *rsa.PublicKey
+	PubKey    *rsa.PublicKey
+	IPAddress string
 }
 
 type retriableError struct {
@@ -115,7 +120,6 @@ func (m *agent) Launch() {
 	stop := make(chan struct{})
 	done1 := make(chan struct{})
 	done2 := make(chan struct{}, m.config.RateLimit)
-	fmt.Printf("Agent started with RateLimit = %d\n", m.config.RateLimit)
 	if m.config.RateLimit == 0 {
 		go m.collectMetrics(stop, done1)
 		go m.sendMetrics(stop, done2)
@@ -203,7 +207,11 @@ func (m *agent) sendMetrics(stop chan struct{}, done chan struct{}) {
 		select {
 		case <-ticker.C:
 			utils.WithRetry(func() error {
-				return m.performRequest(url)
+				if m.config.GRPCClient != nil {
+					return m.performGRPCRequest()
+				} else {
+					return m.performRequest(url)
+				}
 			}, 0, m.config.MaxRetries)
 		case <-stop:
 			fmt.Printf("Stopping metrics sending...\n")
@@ -219,6 +227,21 @@ func hashBodyByKey(key *string, body []byte) string {
 	return hex.EncodeToString(hmac.Sum(nil))
 }
 
+func (m *agent) performGRPCRequest() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	metrics := metricsToSlice(m.metrics)
+	m.config.Logger.Info("Sending metrics to gRPC server...")
+	err := m.config.GRPCClient.SendMetrics(context.Background(), metrics, getAgentIP())
+	if err != nil {
+		return err
+	}
+
+	m.config.Logger.Info("Successfully sent metrics to gRPC server")
+
+	return nil
+}
+
 func (m *agent) performRequest(url string) (err error) {
 	m.config.Logger.Info("Sending metrics to server...")
 	m.mu.Lock()
@@ -232,6 +255,8 @@ func (m *agent) performRequest(url string) (err error) {
 	}
 	r.Header.Set("Content-Type", contentType)
 	r.Header.Set("Accept-Encoding", "gzip")
+	ip := getAgentIP()
+	r.Header.Set("X-Real-IP", ip)
 	if m.config.Hashing.Key != nil && *m.config.Hashing.Key != "" {
 		hValue := hashBodyByKey(m.config.Hashing.Key, body)
 		r.Header.Set(m.config.Hashing.HeaderName, hValue)
@@ -274,6 +299,7 @@ func (m *agent) performRequest(url string) (err error) {
 		return newRetriableError(fmt.Errorf("non-OK HTTP status: %s", resp.Status))
 	}
 	resp.Body.Close()
+
 	return nil
 }
 
@@ -353,10 +379,47 @@ func getGaugeMetricModel(name string, stats runtime.MemStats, g getter) models.M
 }
 
 func prepareRequestBody(m map[string]models.Metrics) []byte {
-	var metrics []models.Metrics
-	for _, metric := range m {
-		metrics = append(metrics, metric)
-	}
+	metrics := metricsToSlice(m)
 	jsonData, _ := json.Marshal(metrics)
+
 	return jsonData
+}
+
+func metricsToSlice(m map[string]models.Metrics) []*models.Metrics {
+	metrics := make([]*models.Metrics, 0, len(m))
+	for _, metric := range m {
+		metrics = append(metrics, &metric)
+	}
+
+	return metrics
+}
+
+func getAgentIP() string {
+	// Search for loopback IP address across network interfaces
+	// For siplicity and in terms of practice, return only loopback IP address
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		addresses, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addresses {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip.IsLoopback() {
+				return ip.String()
+			}
+		}
+	}
+
+	return ""
 }

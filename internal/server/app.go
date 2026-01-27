@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/rsa"
 	"log"
-	"net/http"
 	"time"
 
 	_ "net/http/pprof"
@@ -11,57 +10,92 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/db"
 	appenv "github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/driver"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/handler"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/middleware"
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/repository"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
-	"github.com/go-chi/chi"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
-type Server struct {
-	server            *http.Server
-	logger            *zap.Logger
+type services struct {
+	metricsService interface {
+		ports.MetricServiceWriter
+		ports.MetricServiceReader
+	}
+}
+
+type repositories struct {
+	metricRepo interface {
+		ports.MetricRepoWriter
+		ports.MetricRepoReader
+	}
+}
+
+type App struct {
 	stopCh            chan struct{}
 	doneCh            chan struct{}
 	auditDoneCh       chan struct{}
 	shouldWaitForDone bool
+	opts              baseServerOpts
+	*httpServer
+	*grpcServer
 }
 
-func (s *Server) Run() error {
-	s.logger.Info("Starting server", zap.String("addr", s.server.Addr))
-	return s.server.ListenAndServe()
+type baseServerOpts struct {
+	vars         *appenv.Variables
+	logger       *zap.Logger
+	services     services
+	repositories repositories
 }
 
-func (s *Server) Shutdown() {
-	s.logger.Warn("Shutting down server", zap.String("addr", s.server.Addr))
+func (s *App) Run() error {
+	errgroup := new(errgroup.Group)
+	errgroup.Go(func() error {
+		return s.httpServer.Run()
+	})
+	errgroup.Go(func() error {
+		return s.grpcServer.Run()
+	})
+	if err := errgroup.Wait(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *App) Shutdown() {
 	// notify all subscribed goroutines to exit
+	s.httpServer.Shutdown()
+	s.grpcServer.Shutdown()
 	close(s.stopCh)
 	if s.shouldWaitForDone {
 		<-s.doneCh
 	}
 	<-s.auditDoneCh
-	s.logger.Info("All goroutines have exited")
+	s.opts.logger.Info("All goroutines have exited")
 }
 
-func NewServer(v *appenv.Variables) *Server {
+func NewApp(v *appenv.Variables) *App {
 	// db
 	if v.DatabaseDSN == nil {
 		log.Fatal("database dsn is not set")
 	}
 	dbConf := db.NewDBConfig(*v.DatabaseDSN)
 	d, _ := driver.NewSQLDriver(dbConf)
+
 	// logger
 	logger, err := logger.NewLogger(zap.NewAtomicLevelAt(zap.InfoLevel))
 	if err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
 	}
+
 	// channels
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
 	auditDoneCh := make(chan struct{})
+
 	// repositories
 	metricRepo := repository.NewMetricRepository(
 		*v.FileStoragePath,
@@ -84,27 +118,27 @@ func NewServer(v *appenv.Variables) *Server {
 	// services
 	auditService := service.NewAuditService(*v.AuditFile, *v.AuditURL, stopCh, auditDoneCh)
 	metricService := service.NewMetricService(metricRepo, []byte(*v.Key), auditService, privKey)
-
-	// handlers
-	metricHandler := handler.NewMetricHandler(metricService)
-
-	// routing
-	r := chi.NewRouter()
-	r.Use(middleware.HTTPLogMiddleware(logger))
-	r.Mount("/debug/pprof/", http.DefaultServeMux)
-
-	// register metrics entries
-	metricHandler.Register(r)
-	httpSrv := &http.Server{
-		Addr:    *v.Endpoint,
-		Handler: r,
+	baseOpts := baseServerOpts{
+		vars:   v,
+		logger: logger,
+		services: services{
+			metricsService: metricService,
+		},
+		repositories: repositories{
+			metricRepo: metricRepo,
+		},
 	}
-	return &Server{
-		server:            httpSrv,
-		logger:            logger,
+
+	http := NewHTTPServer(baseOpts)
+	grpc := NewGRPCServer(baseOpts)
+
+	return &App{
+		httpServer:        http,
+		grpcServer:        grpc,
 		stopCh:            stopCh,
 		doneCh:            doneCh,
 		auditDoneCh:       auditDoneCh,
 		shouldWaitForDone: *v.StoreInterval != 0,
+		opts:              baseOpts,
 	}
 }

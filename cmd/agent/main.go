@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/agent"
+	grpc_agent "github.com/funkymotions/go-ya-practicum-metrics/internal/agent/grpc"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/config/env"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/logger"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var buildVersion string
@@ -32,6 +35,20 @@ func main() {
 			log.Fatalf("failed to read RSA public key: %v", err)
 		}
 	}
+
+	var grpcClient *grpc_agent.AgentGRPCClient
+	if *options.EndpointGRPC != "" {
+		conn, err := grpc.NewClient(
+			*options.EndpointGRPC,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			log.Fatalf("failed to connect to gRPC server: %v", err)
+		}
+		defer conn.Close()
+		grpcClient = grpc_agent.NewAgentGRPCClient(conn)
+	}
+
 	agent := agent.NewAgent(&agent.Config{
 		Logger: l,
 		PubKey: pubKey,
@@ -43,6 +60,7 @@ func main() {
 		Client: &http.Client{
 			Timeout: 200 * time.Millisecond,
 		},
+		GRPCClient:     grpcClient,
 		PollInterval:   time.Duration(*options.PollInterval) * time.Second,
 		ReportInterval: time.Duration(*options.ReportInterval) * time.Second,
 		MaxRetries:     maxRetrySendCount,
