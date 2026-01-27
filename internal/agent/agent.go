@@ -418,8 +418,6 @@ func getAgentIP() string {
 			if ip.IsLoopback() {
 				return ip.String()
 			}
-
-			return ""
 		}
 	}
 

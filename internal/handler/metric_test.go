@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/assert"
@@ -22,52 +22,61 @@ type metricServiceStub struct {
 
 func (m *metricServiceStub) SetCounter(name string, value string) error {
 	args := m.Called(name, value)
+
 	return args.Error(0)
 }
 
 func (m *metricServiceStub) SetGauge(name string, value string) error {
 	args := m.Called(name, value)
+
 	return args.Error(0)
 }
 
 func (m *metricServiceStub) GetMetric(name string, metricType string) (*models.Metrics, error) {
 	args := m.Called(name, metricType)
+
 	return args.Get(0).(*models.Metrics), args.Error(1)
 }
 
 func (m *metricServiceStub) GetAllMetricsForHTML() string {
 	args := m.Called()
+
 	return args.Get(0).(string)
 }
 
 func (m *metricServiceStub) SetMetricByModel(metric []byte) (*models.Metrics, error) {
 	args := m.Called(metric)
+
 	return args.Get(0).(*models.Metrics), args.Error(1)
 }
 
 func (m *metricServiceStub) GetMetricByModel(metric *models.Metrics) (*models.Metrics, error) {
 	args := m.Called(metric)
+
 	return args.Get(0).(*models.Metrics), args.Error(1)
 }
 
 func (m *metricServiceStub) Ping() error {
 	args := m.Called()
+
 	return args.Error(0)
 }
 
-func (m *metricServiceStub) SetMetricBulk(body []byte, signature []byte, remoteIP string) error {
-	args := m.Called(body, signature, remoteIP)
+func (m *metricServiceStub) SetMetricBulk(d []models.Metrics, body []byte, signature []byte, remoteIP string) error {
+	args := m.Called(d, body, signature, remoteIP)
+
 	return args.Error(0)
 }
 
-func (m *metricServiceStub) SetEncryptedMetricBulk(body []byte, signature []byte, remoteIP string) error {
-	args := m.Called(body, signature, remoteIP)
+func (m *metricServiceStub) SetEncryptedMetricBulk(d dto.EncryptedMetrics, signature []byte, remoteIP string) error {
+	args := m.Called(d, signature, remoteIP)
+
 	return args.Error(0)
 }
 
 func TestNewMetricHandler(t *testing.T) {
 	type args struct {
-		s ports.MetricService
+		s metricServiceInterface
 	}
 	tests := []struct {
 		name string
@@ -94,7 +103,7 @@ func TestNewMetricHandler(t *testing.T) {
 
 func Test_metricHandler_SetMetric(t *testing.T) {
 	type fields struct {
-		service ports.MetricService
+		service metricServiceInterface
 	}
 	type args struct {
 		entry              string
@@ -238,7 +247,7 @@ func Test_metricHandler_SetMetric(t *testing.T) {
 
 func Test_metricHandler_GetAllMetrics(t *testing.T) {
 	type fields struct {
-		service ports.MetricService
+		service metricServiceInterface
 	}
 	type args struct {
 	}
@@ -292,7 +301,7 @@ func Test_metricHandler_GetAllMetrics(t *testing.T) {
 func Test_metricHandler_GetMetric(t *testing.T) {
 	var metricCounterValue = 1.1
 	type fields struct {
-		service ports.MetricService
+		service metricServiceInterface
 	}
 	type args struct {
 		metricType string

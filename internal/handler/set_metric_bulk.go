@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/dto"
+	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/service"
 )
 
@@ -41,9 +44,21 @@ func (h *metricHandler) SetMetricBulk(w http.ResponseWriter, r *http.Request) {
 	isEncrypted := r.Header.Get("x-encrypted") == "true"
 	remoteIP := r.RemoteAddr
 	if isEncrypted {
-		err = h.service.SetEncryptedMetricBulk(body, []byte(hash), remoteIP)
+		var metrics dto.EncryptedMetrics
+		if err = json.Unmarshal(body, &metrics); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		err = h.service.SetEncryptedMetricBulk(metrics, []byte(hash), remoteIP)
 	} else {
-		err = h.service.SetMetricBulk(body, []byte(hash), remoteIP)
+		var metrics []models.Metrics
+		if err = json.Unmarshal(body, &metrics); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		err = h.service.SetMetricBulk(metrics, body, []byte(hash), remoteIP)
 	}
 	if errors.As(err, &metricErr) {
 		w.WriteHeader(metricErr.StatusCode)

@@ -5,8 +5,8 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/proto"
 )
 
-func CastProtoMetricsToModel(in []*proto.Metric) []*models.Metrics {
-	out := make([]*models.Metrics, 0, len(in))
+func CastProtoMetricsToModel(in []*proto.Metric) []models.Metrics {
+	out := make([]models.Metrics, 0, len(in))
 	for _, m := range in {
 		metricModel := models.Metrics{
 			ID: m.GetId(),
@@ -21,7 +21,7 @@ func CastProtoMetricsToModel(in []*proto.Metric) []*models.Metrics {
 			metricModel.Delta = &delta
 			metricModel.MType = models.Counter
 		}
-		out = append(out, &metricModel)
+		out = append(out, metricModel)
 	}
 
 	return out

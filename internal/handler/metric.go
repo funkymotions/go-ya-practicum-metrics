@@ -8,11 +8,16 @@ import (
 	"github.com/go-chi/chi"
 )
 
-type metricHandler struct {
-	service ports.MetricService
+type metricServiceInterface interface {
+	ports.MetricServiceReader
+	ports.MetricServiceWriter
 }
 
-func NewMetricHandler(s ports.MetricService) *metricHandler {
+type metricHandler struct {
+	service metricServiceInterface
+}
+
+func NewMetricHandler(s metricServiceInterface) *metricHandler {
 	return &metricHandler{
 		service: s,
 	}

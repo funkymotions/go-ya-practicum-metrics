@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/proto"
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 	"google.golang.org/grpc/codes"
@@ -13,7 +14,7 @@ import (
 )
 
 type metricService interface {
-	SetMetricBulk([]byte, []byte, string) error
+	ports.MetricServiceWriter
 }
 
 type metricGRPCHandler struct {
@@ -42,7 +43,7 @@ func (h *metricGRPCHandler) UpdateMetrics(ctx context.Context, req *proto.Update
 		return nil, status.Errorf(codes.Internal, "failed to serialize payload")
 	}
 
-	err = h.service.SetMetricBulk(payload, nil, "")
+	err = h.service.SetMetricBulk(modelMetrics, payload, nil, "")
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to set metrics: %v", err)
 	}

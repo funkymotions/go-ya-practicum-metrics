@@ -13,8 +13,9 @@ import (
 )
 
 type grpcServer struct {
-	grpc   *grpc.Server
-	logger *zap.Logger
+	grpc     *grpc.Server
+	logger   *zap.Logger
+	endpoint string
 }
 
 func NewGRPCServer(
@@ -32,14 +33,15 @@ func NewGRPCServer(
 	}
 
 	return &grpcServer{
-		logger: lo,
-		grpc:   srv,
+		logger:   lo,
+		grpc:     srv,
+		endpoint: *opts.vars.EndpointGRPC,
 	}
 }
 
 func (s *grpcServer) Run() error {
-	s.logger.Info("Starting gRPC server", zap.String("addr", ":9090"))
-	l, err := net.Listen("tcp", ":9090")
+	s.logger.Info("Starting gRPC server", zap.String("addr", s.endpoint))
+	l, err := net.Listen("tcp", s.endpoint)
 	if err != nil {
 		return err
 	}

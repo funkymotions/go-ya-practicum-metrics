@@ -20,11 +20,17 @@ import (
 )
 
 type services struct {
-	metricsService ports.MetricService
+	metricsService interface {
+		ports.MetricServiceWriter
+		ports.MetricServiceReader
+	}
 }
 
 type repositories struct {
-	metricRepo ports.MetricRepoInterface
+	metricRepo interface {
+		ports.MetricRepoWriter
+		ports.MetricRepoReader
+	}
 }
 
 type App struct {

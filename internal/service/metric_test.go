@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	models "github.com/funkymotions/go-ya-practicum-metrics/internal/model"
-	"github.com/funkymotions/go-ya-practicum-metrics/internal/ports"
 	"github.com/magiconair/properties/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -56,7 +55,7 @@ func (m *metricRepoStub) SetMetricBulk(metrics *[]models.Metrics) error {
 
 func TestNewMetricService(t *testing.T) {
 	type args struct {
-		repo ports.MetricRepoInterface
+		repo metricRepoInterface
 	}
 	tests := []struct {
 		name string
@@ -86,7 +85,7 @@ func TestNewMetricService(t *testing.T) {
 func Test_metricService_SetCounter(t *testing.T) {
 	re := regexp.MustCompile(`^\w+$`)
 	type fields struct {
-		repo ports.MetricRepoInterface
+		repo metricRepoInterface
 	}
 	type args struct {
 		name     string
@@ -138,7 +137,7 @@ func Test_metricService_SetCounter(t *testing.T) {
 func Test_metricService_SetGauge(t *testing.T) {
 	re := regexp.MustCompile(`^\w+$`)
 	type fields struct {
-		repo ports.MetricRepoInterface
+		repo metricRepoInterface
 	}
 	type args struct {
 		name     string
@@ -191,7 +190,7 @@ func Test_metricService_GetAllMetricsForHTML(t *testing.T) {
 	var val = 10.5
 	var delta int64 = 20
 	type fields struct {
-		repo ports.MetricRepoInterface
+		repo metricRepoInterface
 	}
 	tests := []struct {
 		name          string

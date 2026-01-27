@@ -18,6 +18,11 @@ import (
 	"github.com/funkymotions/go-ya-practicum-metrics/internal/utils"
 )
 
+type metricRepoInterface interface {
+	ports.MetricRepoReader
+	ports.MetricRepoWriter
+}
+
 type InvalidMetricError struct {
 	Message    string
 	StatusCode int
@@ -32,7 +37,7 @@ type auditPublisher interface {
 }
 
 type metricService struct {
-	repo       ports.MetricRepoInterface
+	repo       metricRepoInterface
 	re         *regexp.Regexp
 	hashSecret []byte
 	audit      auditPublisher
@@ -40,7 +45,7 @@ type metricService struct {
 }
 
 func NewMetricService(
-	repo ports.MetricRepoInterface,
+	repo metricRepoInterface,
 	hashSecret []byte,
 	audit auditPublisher,
 	privKey *rsa.PrivateKey,
@@ -61,6 +66,7 @@ func (s *metricService) SetCounter(name string, rawValue string) error {
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	value, err := strconv.ParseInt(rawValue, 10, 64)
 	if err != nil {
 		return &InvalidMetricError{
@@ -68,7 +74,9 @@ func (s *metricService) SetCounter(name string, rawValue string) error {
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	s.repo.SetCounterIntrospect(name, value)
+
 	return nil
 }
 
@@ -79,6 +87,7 @@ func (s *metricService) SetGauge(name string, rawValue string) error {
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	value, err := strconv.ParseFloat(rawValue, 64)
 	if err != nil {
 		return &InvalidMetricError{
@@ -86,7 +95,9 @@ func (s *metricService) SetGauge(name string, rawValue string) error {
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	s.repo.SetGaugeIntrospect(name, value)
+
 	return nil
 }
 
@@ -97,6 +108,7 @@ func (s *metricService) GetMetric(name string, metricType string) (*models.Metri
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	m, res := s.repo.GetMetric(name, metricType)
 	if !res {
 		return nil, &InvalidMetricError{
@@ -104,6 +116,7 @@ func (s *metricService) GetMetric(name string, metricType string) (*models.Metri
 			StatusCode: http.StatusNotFound,
 		}
 	}
+
 	return m, nil
 }
 
@@ -113,6 +126,7 @@ func (s *metricService) GetAllMetricsForHTML() string {
 	for _, m := range metrics {
 		result += fmt.Sprintf("%s\n", m.String())
 	}
+
 	return result
 }
 
@@ -136,6 +150,7 @@ func (s *metricService) SetMetricByModel(input []byte) (*models.Metrics, error) 
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	var retriableFn func() error
 	switch metric.MType {
 	case models.Gauge:
@@ -159,6 +174,7 @@ func (s *metricService) SetMetricByModel(input []byte) (*models.Metrics, error) 
 			StatusCode: http.StatusInternalServerError,
 		}
 	}
+
 	return &metric, nil
 }
 
@@ -169,6 +185,7 @@ func (s *metricService) GetMetricByModel(metric *models.Metrics) (*models.Metric
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	m, found := s.repo.GetMetric(metric.ID, metric.MType)
 	if !found {
 		return nil, &InvalidMetricError{
@@ -176,6 +193,7 @@ func (s *metricService) GetMetricByModel(metric *models.Metrics) (*models.Metric
 			StatusCode: http.StatusNotFound,
 		}
 	}
+
 	return m, nil
 }
 
@@ -183,35 +201,35 @@ func (s *metricService) Ping() error {
 	return s.repo.Ping()
 }
 
-func (s *metricService) SetEncryptedMetricBulk(input []byte, signature []byte, remoteIP string) error {
-	var encryptedMetrics dto.EncryptedMetrics
-	if err := json.Unmarshal(input, &encryptedMetrics); err != nil {
-		return &InvalidMetricError{
-			Message:    err.Error(),
-			StatusCode: http.StatusBadRequest,
-		}
-	}
-	encryptedPayload, err := hex.DecodeString(encryptedMetrics.Payload)
+func (s *metricService) SetEncryptedMetricBulk(
+	input dto.EncryptedMetrics,
+	signature []byte,
+	remoteIP string,
+) error {
+	encryptedPayload, err := hex.DecodeString(input.Payload)
 	if err != nil {
 		return &InvalidMetricError{
 			Message:    "invalid payload encoding",
 			StatusCode: http.StatusBadRequest,
 		}
 	}
-	encryptedSecret, err := hex.DecodeString(encryptedMetrics.Secret)
+
+	encryptedSecret, err := hex.DecodeString(input.Secret)
 	if err != nil {
 		return &InvalidMetricError{
 			Message:    "invalid secret encoding",
 			StatusCode: http.StatusBadRequest,
 		}
 	}
-	nonce, err := hex.DecodeString(encryptedMetrics.Nonce)
+
+	nonce, err := hex.DecodeString(input.Nonce)
 	if err != nil {
 		return &InvalidMetricError{
 			Message:    "invalid nonce encoding",
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	symmetricKey, err := utils.DecryptRSA(encryptedSecret, s.privateKey)
 	if err != nil {
 		return &InvalidMetricError{
@@ -219,6 +237,7 @@ func (s *metricService) SetEncryptedMetricBulk(input []byte, signature []byte, r
 			StatusCode: http.StatusBadRequest,
 		}
 	}
+
 	decryptedPayload, err := utils.DecryptWithAESKey(encryptedPayload, symmetricKey, nonce)
 	if err != nil {
 		return &InvalidMetricError{
@@ -227,14 +246,25 @@ func (s *metricService) SetEncryptedMetricBulk(input []byte, signature []byte, r
 		}
 	}
 
-	input = decryptedPayload
+	var metrics []models.Metrics
+	if err := json.Unmarshal(decryptedPayload, &metrics); err != nil {
+		return &InvalidMetricError{
+			Message:    err.Error(),
+			StatusCode: http.StatusBadRequest,
+		}
+	}
 
-	return s.SetMetricBulk(input, signature, remoteIP)
+	return s.SetMetricBulk(metrics, decryptedPayload, signature, remoteIP)
 }
 
-func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP string) error {
+func (s *metricService) SetMetricBulk(
+	input []models.Metrics,
+	rawInput []byte,
+	signature []byte,
+	remoteIP string,
+) error {
 	if len(s.hashSecret) > 0 {
-		if ok := isHashValid(signature, input, s.hashSecret); !ok {
+		if ok := isHashValid(signature, rawInput, s.hashSecret); !ok {
 			return &InvalidMetricError{
 				Message:    "invalid hash",
 				StatusCode: http.StatusBadRequest,
@@ -243,12 +273,6 @@ func (s *metricService) SetMetricBulk(input []byte, signature []byte, remoteIP s
 	}
 
 	var metrics []models.Metrics
-	if err := json.NewDecoder(bytes.NewReader(input)).Decode(&metrics); err != nil {
-		return &InvalidMetricError{
-			Message:    err.Error(),
-			StatusCode: http.StatusBadRequest,
-		}
-	}
 	err := s.repo.SetMetricBulk(&metrics)
 	if err == nil {
 		s.audit.Notify(metrics, remoteIP)
@@ -276,11 +300,13 @@ func isHashValid(signature, payload, secret []byte) bool {
 	if len(signature) == 0 || len(payload) == 0 || len(secret) == 0 {
 		return false
 	}
+
 	decodedSignature := make([]byte, sha256.Size)
 	_, err := hex.Decode(decodedSignature, signature)
 	if err != nil {
 		return false
 	}
+
 	h := hmac.New(sha256.New, secret)
 	h.Write(payload)
 	hash := h.Sum(nil)

@@ -23,9 +23,6 @@ func NewAgentGRPCClient(conn *grpc.ClientConn) *AgentGRPCClient {
 }
 
 func (c *AgentGRPCClient) SendMetrics(ctx context.Context, metrics []*models.Metrics, agentIP string) error {
-	// ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	// defer cancel()
-
 	md := metadata.Pairs("x-real-ip", agentIP)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	var protoMetrics []*proto.Metric
